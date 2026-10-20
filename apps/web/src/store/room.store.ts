@@ -1,4 +1,5 @@
 import type { Socket } from 'socket.io-client'
+import { toast } from 'sonner'
 import { create } from 'zustand'
 import { connectSocket, disconnectSocket } from '../lib/socket'
 import { loadRoomConfig, type RoomView } from '../lib/rooms'
@@ -6,7 +7,7 @@ import { NetworkManager } from '../webrtc/NetworkManager'
 import type { LinkState, P2PMessage, PeerInfo } from '../webrtc/types'
 
 export type RoomStatus = 'idle' | 'joining' | 'joined' | 'reconnecting' | 'ended'
-export type MicState = 'off' | 'on' | 'denied'
+export type MicState = 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable'
 
 export interface PeerView extends PeerInfo {
   link: LinkState
@@ -62,18 +63,48 @@ const initial = {
   endedReason: null,
 }
 
-async function acquireMic(): Promise<MediaStreamTrack | null> {
-  if (!navigator.mediaDevices?.getUserMedia) return null
+type MicResult =
+  | { track: MediaStreamTrack; error: null; detail?: undefined }
+  | { track: null; error: Exclude<MicState, 'off' | 'on'>; detail?: string }
+
+async function acquireMic(): Promise<MicResult> {
+  // Browsers only expose the microphone on HTTPS or localhost. Over plain
+  // http://<lan-ip> mediaDevices is undefined and no permission prompt exists.
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    return { track: null, error: 'unsupported' }
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false,
     })
-    return stream.getAudioTracks()[0] ?? null
-  } catch {
-    return null
+    const track = stream.getAudioTracks()[0]
+    return track ? { track, error: null } : { track: null, error: 'unavailable' }
+  } catch (err) {
+    const name = err instanceof DOMException ? err.name : 'Error'
+    const detail = `${name}${err instanceof Error && err.message ? `: ${err.message}` : ''}`
+    return {
+      track: null,
+      error: name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : 'unavailable',
+      detail,
+    }
   }
 }
+
+/** Tells the person exactly why the microphone isn't working (and logs the raw error). */
+function toastMicError(error: Exclude<MicState, 'off' | 'on'>, detail?: string) {
+  const where = `${window.location.protocol}//${window.location.host}`
+  const messages = {
+    unsupported: `Microphone needs a secure page. This page is ${where} (secure context: ${String(window.isSecureContext)}). Use https:// or localhost.`,
+    denied: `Microphone permission was denied${detail ? ` (${detail})` : ''}. Allow it in Chrome: tap the icon left of the address bar, Permissions, Microphone.`,
+    unavailable: `No usable microphone${detail ? ` (${detail})` : ''}. Another app may be using it.`,
+  }
+  console.warn('[mic]', error, detail, where)
+  toast.error(messages[error], { duration: 12000 })
+}
+
+const newId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
 
 function emitJoin(
   socket: Socket,
@@ -236,10 +267,14 @@ export const useRoomStore = create<RoomState>()((set, get) => {
         /* keep default */
       }
 
-      let micDenied = false
+      let micError: MicState = 'off'
       if (withMic) {
-        localTrack = await acquireMic()
-        micDenied = !localTrack
+        const res = await acquireMic()
+        localTrack = res.track
+        if (res.error) {
+          micError = res.error
+          toastMicError(res.error, res.detail)
+        }
       }
       if (gen !== generation) {
         stopMic()
@@ -267,7 +302,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       if (!ack.ok) return fail(ack)
 
       set({
-        mic: localTrack ? 'on' : micDenied ? 'denied' : 'off',
+        mic: localTrack ? 'on' : micError,
         muted: !localTrack,
       })
       startNetwork(ack)
@@ -289,7 +324,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       const { selfId, status } = get()
       if (!trimmed || trimmed.length > chatMax || status !== 'joined' || !selfId) return false
 
-      const msg = { type: 'chat' as const, id: crypto.randomUUID(), text: trimmed, ts: Date.now() }
+      const msg = { type: 'chat' as const, id: newId(), text: trimmed, ts: Date.now() }
       manager?.broadcast(msg)
       set((s) => ({
         messages: [
@@ -302,10 +337,13 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
     enableMic: async () => {
       if (localTrack || get().status !== 'joined') return
-      const track = await acquireMic()
-      if (!track) return set({ mic: 'denied' })
-      localTrack = track
-      manager?.setLocalAudioTrack(track)
+      const res = await acquireMic()
+      if (!res.track) {
+        toastMicError(res.error, res.detail)
+        return set({ mic: res.error })
+      }
+      localTrack = res.track
+      manager?.setLocalAudioTrack(res.track)
       manager?.setPresence({ muted: false })
       set({ mic: 'on', muted: false })
     },

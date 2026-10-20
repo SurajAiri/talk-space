@@ -15,6 +15,14 @@ type PreviewState =
 
 const ROOM_ID = /^[A-Z]{6}$/
 
+const MIC_HINT: Partial<Record<string, string>> = {
+  off: 'You’re listening only.',
+  denied: 'Microphone is blocked. Allow it in your browser’s site settings, then try again.',
+  unavailable: 'No working microphone was found on this device.',
+  unsupported:
+    'This browser only allows the microphone on secure pages. Open the site over HTTPS (or localhost).',
+}
+
 export default function RoomPage() {
   const params = useParams()
   const roomId = (params.roomId ?? '').toUpperCase()
@@ -279,13 +287,7 @@ function InRoom() {
             </button>
           )}
           <span className="hint">
-            {mic === 'denied'
-              ? 'Microphone is blocked. Allow it in your browser’s site settings, then try again.'
-              : mic === 'off'
-                ? 'You’re listening only.'
-                : muted
-                  ? 'You’re muted.'
-                  : 'Others can hear you.'}
+            {MIC_HINT[mic] ?? (muted ? 'You’re muted.' : 'Others can hear you.')}
           </span>
         </footer>
       </main>
