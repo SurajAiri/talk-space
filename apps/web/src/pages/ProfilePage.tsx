@@ -1,10 +1,10 @@
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '../store/auth.store'
 
 const list = (items: string[]) => (items.length > 0 ? items.join(', ') : '—')
 
-export default function HomePage() {
+export default function ProfilePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
@@ -34,7 +34,7 @@ export default function HomePage() {
   return (
     <div className="center-screen">
       <div className="card">
-        <h1>Home</h1>
+        <h1>Profile</h1>
         <dl className="info">
           {rows.map(([label, value]) => (
             <div key={label}>
@@ -43,6 +43,7 @@ export default function HomePage() {
             </div>
           ))}
         </dl>
+        <Link to="/home" className="btn btn-outline center">Back to rooms</Link>
         <button className="btn" onClick={onLogout}>Log out</button>
       </div>
     </div>

@@ -4,7 +4,9 @@ import { Toaster } from 'sonner'
 import { ProtectedRoute, PublicOnlyRoute } from './components/RouteGuards'
 import AuthPage from './pages/AuthPage'
 import GoogleCallbackPage from './pages/GoogleCallbackPage'
-import HomePage from './pages/HomePage'
+import LobbyPage from './pages/LobbyPage'
+import ProfilePage from './pages/ProfilePage'
+import RoomPage from './pages/RoomPage'
 import { useAuthStore } from './store/auth.store'
 
 export default function App() {
@@ -23,7 +25,9 @@ export default function App() {
           <Route path="/auth" element={<AuthPage />} />
         </Route>
         <Route element={<ProtectedRoute />}>
-          <Route path="/home" element={<HomePage />} />
+          <Route path="/home" element={<LobbyPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/room/:roomId" element={<RoomPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

@@ -6,10 +6,7 @@ import { AppError } from "../../utils/errors.js";
 import { loginSchema, registerSchema } from "./schemas.js";
 import * as authService from "./services.js";
 
-function parse<T>(
-  schema: { safeParse: (d: unknown) => any },
-  body: unknown,
-): T {
+function parse<T>(schema: { safeParse: (d: unknown) => any }, body: unknown): T {
   const result = schema.safeParse(body);
   if (!result.success) {
     throw new AppError(400, result.error.issues[0]?.message ?? "Invalid input");
@@ -47,7 +44,7 @@ export async function googleComplete(req: Request, res: Response) {
   const session = await googleAuth.api.getSession({
     headers: fromNodeHeaders(req.headers),
   });
-  if (!session) return fail("Google login failed; no session");
+  if (!session) return fail("Google login failed");
 
   try {
     const { token } = await authService.loginWithGoogle({
@@ -56,10 +53,6 @@ export async function googleComplete(req: Request, res: Response) {
     });
     res.redirect(`${env.WEB_URL}/auth/callback#token=${token}`);
   } catch (err) {
-    fail(
-      err instanceof AppError
-        ? err.message
-        : "Google login failed unexpectedly",
-    );
+    fail(err instanceof AppError ? err.message : "Google login failed");
   }
 }

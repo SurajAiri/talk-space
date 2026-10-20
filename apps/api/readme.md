@@ -54,3 +54,21 @@ Imports use `.js` extensions (NodeNext ESM) even though the files are `.ts`.
 handshake. `GET /api/v1/auth/google/complete` then finds or creates the user in `users`
 and redirects to the web app with our normal JWT. Register this redirect URI in Google Cloud:
 `http://localhost:5173/api/v1/better-auth/callback/google`
+
+## Rooms & signaling
+
+Rooms are ephemeral and live **only in Redis** (`features/rooms/store.ts`); Postgres is untouched.
+Central settings (max members, id/code lengths, grace periods, rate limits, languages, purposes)
+are in `src/config/rooms.config.ts`; `ROOM_MAX_MEMBERS` overrides the member limit via env. The web app
+reads these from `GET /api/v1/rooms/config`.
+
+| REST (JWT) | |
+| --- | --- |
+| `GET /rooms/config` | limits + language/purpose options |
+| `GET /rooms?language=&purpose=&tags=a,b&q=&hasSpace=true` | public rooms (only ones someone is inside) |
+| `POST /rooms` | create (public: 6-letter id; private: also a 6-digit join code) |
+| `GET /rooms/:id` | safe preview for the pre-join screen |
+
+Signaling is Socket.IO at `/api/v1/realtime` (auth: `{ token }`). Events: `room:join` (ack),
+`room:leave`, `signal` (relayed offer/answer/ICE) and server -> client `peer:joined`, `peer:left`,
+`room:replaced`. Audio and chat never reach the server; they go peer-to-peer over WebRTC.
