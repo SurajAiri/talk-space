@@ -8,6 +8,13 @@
       "when": 1792468770463,
       "tag": "0000_stale_nicolaos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792476184208,
+      "tag": "0001_user_profile_fields",
+      "breakpoints": true
     }
   ]
 }

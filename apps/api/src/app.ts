@@ -1,4 +1,6 @@
+import { toNodeHandler } from "better-auth/node";
 import express from "express";
+import { googleAuth } from "./lib/better-auth.js";
 import { authorizeUser } from "./middlewares/authorization.middlewares.js";
 import {
   errorHandler,
@@ -8,6 +10,9 @@ import responseFormatter from "./middlewares/response.middlewares.js";
 import router from "./routes/index.routes.js";
 
 export const app = express();
+
+// better-auth (Google handshake only) must be mounted BEFORE express.json()
+app.all("/api/v1/better-auth/*splat", toNodeHandler(googleAuth));
 
 // middlewares
 app.use(express.json());

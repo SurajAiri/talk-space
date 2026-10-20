@@ -14,4 +14,10 @@ export const env = {
   DATABASE_URL: required("DATABASE_URL"),
   JWT_SECRET: required("JWT_SECRET"),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "7d",
+  // Google login (better-auth)
+  BETTER_AUTH_SECRET: required("BETTER_AUTH_SECRET"),
+  BETTER_AUTH_URL: required("BETTER_AUTH_URL"),
+  WEB_URL: required("WEB_URL"),
+  GOOGLE_CLIENT_ID: required("GOOGLE_CLIENT_ID"),
+  GOOGLE_CLIENT_SECRET: required("GOOGLE_CLIENT_SECRET"),
 } as const;

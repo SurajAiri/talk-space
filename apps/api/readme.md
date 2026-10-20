@@ -6,7 +6,7 @@ Express 5 + TypeScript + Drizzle ORM (PostgreSQL).
 
 ```bash
 npm install
-cp .env.example .env      # then fill in DATABASE_URL and JWT_SECRET
+cp .env.example .env      # then fill in DATABASE_URL, JWT_SECRET and the Google/better-auth vars
 npm run db:migrate        # apply migrations in ./drizzle
 npm run dev               # tsx watch, http://localhost:3000/api/v1/health
 ```
@@ -47,3 +47,10 @@ Imports use `.js` extensions (NodeNext ESM) even though the files are `.ts`.
 2. `npm run db:generate && npm run db:migrate`
 3. Create `src/features/<name>/{routes,controllers,services}.ts`
 4. Mount the router in `src/routes/index.routes.ts`
+
+## Google login
+
+`lib/better-auth.ts` runs better-auth stateless (no database) just for the Google OAuth
+handshake. `GET /api/v1/auth/google/complete` then finds or creates the user in `users`
+and redirects to the web app with our normal JWT. Register this redirect URI in Google Cloud:
+`http://localhost:5173/api/v1/better-auth/callback/google`

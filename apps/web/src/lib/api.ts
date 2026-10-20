@@ -1,0 +1,40 @@
+export interface User {
+  id: string
+  name: string
+  username: string
+  email: string
+  bio: string | null
+  spokenLanguages: string[]
+  interests: string[]
+  skills: string[]
+  reputationScore: number
+  strikes: number
+  status: 'active' | 'suspended' | 'banned'
+  userType: 'user' | 'admin'
+  createdAt: string
+}
+
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+export async function api<T>(
+  path: string,
+  options: { method?: string; body?: unknown; token?: string | null } = {},
+): Promise<T> {
+  const res = await fetch(`/api/v1${path}`, {
+    method: options.method ?? 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  })
+  const json = await res.json().catch(() => null)
+  if (!res.ok) throw new ApiError(res.status, json?.message ?? 'Request failed')
+  return json.data as T
+}

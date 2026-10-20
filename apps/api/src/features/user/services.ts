@@ -6,7 +6,16 @@ export async function findUserById(id: string) {
   const [user] = await db
     .select({
       id: users.id,
+      name: users.name,
+      username: users.username,
       email: users.email,
+      bio: users.bio,
+      spokenLanguages: users.spokenLanguages,
+      interests: users.interests,
+      skills: users.skills,
+      reputationScore: users.reputationScore,
+      strikes: users.strikes,
+      status: users.status,
       userType: users.userType,
       createdAt: users.createdAt,
     })
