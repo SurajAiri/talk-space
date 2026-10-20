@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: myapp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: myapp-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes
+
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: myapp-minio
+  #   restart: unless-stopped
+  #   ports:
+  #     - "9000:9000" # S3 API
+  #     - "9001:9001" # Admin UI
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
+  #   command: server /data --console-address ":9001"
+  #   volumes:
+  #     - minio_data:/data
+
+  # # Local trace viewer for engine.telemetry (see engine.telemetry.setup_telemetry).
+  # # Jaeger accepts OTLP directly on 4317 (gRPC) — point Runner's
+  # # otlp_endpoint at "http://localhost:4317" and view traces at :16686.
+  # # Optional: engine.telemetry works fine with otlp_endpoint=None (spans
+  # # are just created and go nowhere) if you don't need to view them locally.
+  # jaeger:
+  #   image: jaegertracing/all-in-one:latest
+  #   container_name: myapp-jaeger
+  #   restart: unless-stopped
+  #   environment:
+  #     COLLECTOR_OTLP_ENABLED: "true"
+  #   ports:
+  #     - "16686:16686" # Web UI
+  #     - "4317:4317" # OTLP gRPC receiver
+
+volumes:
+  postgres_data:
+  # redis_data:
+  # minio_data:
