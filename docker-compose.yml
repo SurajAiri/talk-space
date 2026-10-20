@@ -1,57 +1,78 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: myapp-postgres
+    container_name: app-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: myapp
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-app}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: myapp-redis
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis_data:/data
-  #   command: redis-server --appendonly yes
+  redis:
+    image: redis:7-alpine
+    container_name: app-redis
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:-redis}",
+      ]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # minio:
-  #   image: minio/minio:latest
-  #   container_name: myapp-minio
-  #   restart: unless-stopped
-  #   ports:
-  #     - "9000:9000" # S3 API
-  #     - "9001:9001" # Admin UI
-  #   environment:
-  #     MINIO_ROOT_USER: minioadmin
-  #     MINIO_ROOT_PASSWORD: minioadmin
-  #   command: server /data --console-address ":9001"
-  #   volumes:
-  #     - minio_data:/data
+  # MinIO's official Docker Hub / quay.io images were removed in Sept 2026,
+  # so this uses Chainguard's build of MinIO instead.
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: app-minio
+    restart: unless-stopped
+    user: "0:0" # image defaults to uid 65532; root avoids volume permission errors in local dev
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000" # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console
+    volumes:
+      - minio_data:/data
 
-  # # Local trace viewer for engine.telemetry (see engine.telemetry.setup_telemetry).
-  # # Jaeger accepts OTLP directly on 4317 (gRPC) — point Runner's
-  # # otlp_endpoint at "http://localhost:4317" and view traces at :16686.
-  # # Optional: engine.telemetry works fine with otlp_endpoint=None (spans
-  # # are just created and go nowhere) if you don't need to view them locally.
-  # jaeger:
-  #   image: jaegertracing/all-in-one:latest
-  #   container_name: myapp-jaeger
-  #   restart: unless-stopped
-  #   environment:
-  #     COLLECTOR_OTLP_ENABLED: "true"
-  #   ports:
-  #     - "16686:16686" # Web UI
-  #     - "4317:4317" # OTLP gRPC receiver
+  # Creates the bucket, retrying until MinIO is up (no shell/healthcheck needed)
+  minio-init:
+    image: cgr.dev/chainguard/minio-client:latest
+    container_name: app-minio-init
+    depends_on:
+      - minio
+    restart: on-failure
+    environment:
+      MC_CONFIG_DIR: /tmp/mc
+      MC_HOST_local: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000
+    command: ["mb", "--ignore-existing", "local/${MINIO_BUCKET:-app-bucket}"]
 
 volumes:
   postgres_data:
-  # redis_data:
-  # minio_data:
+  redis_data:
+  minio_data:
