@@ -16,6 +16,9 @@ export default function RoomCard({ room, config, onJoin }: Props) {
         <div className="chips">
           <span className="chip">{labelFor(config?.languages, room.language)}</span>
           <span className="chip">{labelFor(config?.purposes, room.purpose)}</span>
+          {room.map && room.map !== 'none' && (
+            <span className="chip">🗺 {labelFor(config?.maps, room.map).split(' (')[0]}</span>
+          )}
           {room.tags.map((t) => (
             <span key={t} className="chip chip-tag">
               #{t}

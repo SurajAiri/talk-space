@@ -1,6 +1,6 @@
 import type { Socket } from 'socket.io-client'
 import { PeerLink } from './PeerLink'
-import { parseP2PMessage, type LinkState, type P2PMessage, type SignalData } from './types'
+import { parseP2PMessage, type LinkState, type P2PMessage, type PosMessage, type SignalData } from './types'
 
 export interface NetworkHandlers {
   onPeerState: (id: string, state: LinkState) => void
@@ -33,6 +33,8 @@ export class NetworkManager {
   private readonly links = new Map<string, PeerLink>()
   private localTrack: MediaStreamTrack | null = null
   private muted = true
+  /** latest position, replayed to links that open later so newcomers see us immediately */
+  private lastPos: string | null = null
 
   constructor(opts: NetworkManagerOptions) {
     this.opts = opts
@@ -68,6 +70,9 @@ export class NetworkManager {
         if (msg) this.opts.handlers.onPeerMessage(peerId, msg)
       },
       onOpen: () => link.send(JSON.stringify({ type: 'presence', muted: this.muted })),
+      onPosOpen: () => {
+        if (this.lastPos) link.sendUnreliable(this.lastPos)
+      },
     })
     this.links.set(peerId, link)
   }
@@ -84,6 +89,15 @@ export class NetworkManager {
     const raw = JSON.stringify(msg)
     let reached = 0
     for (const link of this.links.values()) if (link.send(raw)) reached++
+    return reached
+  }
+
+  /** Best-effort position broadcast on the unreliable channel; returns how many peers it reached. */
+  sendPosition(msg: PosMessage): number {
+    const raw = JSON.stringify(msg)
+    this.lastPos = raw
+    let reached = 0
+    for (const link of this.links.values()) if (link.sendUnreliable(raw)) reached++
     return reached
   }
 

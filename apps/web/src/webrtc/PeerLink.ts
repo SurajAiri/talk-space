@@ -12,13 +12,16 @@ export interface PeerLinkOptions {
   onStream: (stream: MediaStream) => void
   onData: (raw: unknown) => void
   onOpen: () => void
+  /** the unreliable (position) channel is ready */
+  onPosOpen?: () => void
 }
 
 const MAX_ICE_RESTARTS = 2
 
 /**
- * One RTCPeerConnection to one remote peer: a pre-negotiated data channel
- * (chat/presence) and one bidirectional audio transceiver that exists from the
+ * One RTCPeerConnection to one remote peer: two pre-negotiated data channels
+ * (id 0: reliable+ordered for chat/presence; id 1: unordered, no retransmits for
+ * positions) and one bidirectional audio transceiver that exists from the
  * start, so muting/unmuting is just replaceTrack() with no renegotiation.
  *
  * Negotiation follows the "perfect negotiation" pattern: if both sides send an
@@ -30,6 +33,7 @@ export class PeerLink {
   private readonly opts: PeerLinkOptions
   private readonly pc: RTCPeerConnection
   private readonly channel: RTCDataChannel
+  private readonly posChannel: RTCDataChannel
   private readonly audio: RTCRtpTransceiver
   private readonly polite: boolean
   private readonly remoteStream = new MediaStream()
@@ -92,6 +96,15 @@ export class PeerLink {
     this.channel = pc.createDataChannel('data', { negotiated: true, id: 0, ordered: true })
     this.channel.onopen = () => opts.onOpen()
     this.channel.onmessage = (e) => opts.onData(e.data)
+    // Positions: a stale update is useless, so never retransmit and never wait for order.
+    this.posChannel = pc.createDataChannel('pos', {
+      negotiated: true,
+      id: 1,
+      ordered: false,
+      maxRetransmits: 0,
+    })
+    this.posChannel.onopen = () => opts.onPosOpen?.()
+    this.posChannel.onmessage = (e) => opts.onData(e.data)
 
     this.audio = pc.addTransceiver('audio', { direction: 'sendrecv' })
     if (opts.localAudioTrack) void this.audio.sender.replaceTrack(opts.localAudioTrack)
@@ -111,6 +124,13 @@ export class PeerLink {
     return true
   }
 
+  /** Best-effort, may be dropped. Returns false if the channel is not open yet. */
+  sendUnreliable(raw: string): boolean {
+    if (this.posChannel.readyState !== 'open') return false
+    this.posChannel.send(raw)
+    return true
+  }
+
   setAudioTrack(track: MediaStreamTrack | null) {
     return this.audio.sender.replaceTrack(track)
   }
@@ -119,9 +139,11 @@ export class PeerLink {
     if (this.closed) return
     this.closed = true
     this.channel.onopen = this.channel.onmessage = null
+    this.posChannel.onopen = this.posChannel.onmessage = null
     this.pc.onnegotiationneeded = this.pc.onicecandidate = this.pc.ontrack = null
     this.pc.onconnectionstatechange = this.pc.oniceconnectionstatechange = null
     this.channel.close()
+    this.posChannel.close()
     this.pc.close()
     this.opts.onState('closed')
   }

@@ -68,9 +68,23 @@ export const LANGUAGES = [
   { value: "it", label: "Italian" },
 ] as const;
 
+/**
+ * The 2D world a room is held in. `none` = a plain voice/chat room (the original
+ * behaviour). The server never needs map geometry: positions travel peer-to-peer,
+ * so the server only stores and validates this key. Geometry lives in the web app.
+ */
+export const MAPS = [
+  { value: "none", label: "No map (voice & chat only)" },
+  { value: "commons", label: "Courtyard Commons (café, rec room, studio, campfire)" },
+  { value: "beach", label: "Sunset Beach (tiki deck, bonfire, pier)" },
+  { value: "market", label: "Sky Night Market (conservatory, tea pavilion)" },
+] as const;
+
 export type Purpose = (typeof PURPOSES)[number]["value"];
+export type RoomMap = (typeof MAPS)[number]["value"];
 export type Visibility = "public" | "private";
 
+export const MAP_VALUES = MAPS.map((m) => m.value) as [RoomMap, ...RoomMap[]];
 export const PURPOSE_VALUES = PURPOSES.map((p) => p.value) as [Purpose, ...Purpose[]];
 export const LANGUAGE_VALUES = new Set<string>(LANGUAGES.map((l) => l.value));
 
@@ -89,5 +103,6 @@ export function publicRoomConfig() {
     chatMessageMax: ROOM_CONFIG.chatMessageMax,
     purposes: PURPOSES,
     languages: LANGUAGES,
+    maps: MAPS,
   };
 }

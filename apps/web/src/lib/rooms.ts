@@ -1,4 +1,5 @@
 import { api } from './api'
+import type { RoomMapKey } from '../world/maps'
 import { useAuthStore } from '../store/auth.store'
 
 export interface Option {
@@ -16,6 +17,7 @@ export interface RoomConfig {
   chatMessageMax: number
   purposes: Option[]
   languages: Option[]
+  maps: Option[]
 }
 
 export interface RoomView {
@@ -25,6 +27,8 @@ export interface RoomView {
   language: string
   purpose: string
   tags: string[]
+  /** 'none' = plain voice/chat room */
+  map: RoomMapKey
   visibility: 'public' | 'private'
   maxMembers: number
   createdAt: number
@@ -58,6 +62,7 @@ export interface CreateRoomInput {
   language: string
   purpose: string
   tags: string[]
+  map: RoomMapKey
   visibility: 'public' | 'private'
 }
 

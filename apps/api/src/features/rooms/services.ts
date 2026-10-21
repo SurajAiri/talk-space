@@ -13,6 +13,7 @@ export function toView(
   const { joinCode, ...rest } = meta;
   return {
     ...rest,
+    map: rest.map ?? "none",
     participantCount,
     ...(opts.includeJoinCode && joinCode ? { joinCode } : {}),
   };

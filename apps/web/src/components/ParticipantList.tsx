@@ -16,6 +16,8 @@ export default function ParticipantList() {
   const peers = useRoomStore((s) => s.peers)
   const muted = useRoomStore((s) => s.muted)
   const mic = useRoomStore((s) => s.mic)
+  // In a world, the ProximityMixer plays voices (with per-person volume); a plain <audio> here would double them.
+  const hasWorld = useRoomStore((s) => s.world !== null)
   const list = Object.values(peers)
 
   return (
@@ -35,7 +37,7 @@ export default function ParticipantList() {
             <div className="person-sub">{LINK_LABEL[p.link]}</div>
           </div>
           <span className="person-mic">{p.muted ? 'Muted' : 'Live'}</span>
-          <RemoteAudio stream={p.stream} />
+          {!hasWorld && <RemoteAudio stream={p.stream} />}
         </li>
       ))}
     </ul>

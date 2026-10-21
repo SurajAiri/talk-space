@@ -14,6 +14,24 @@ export interface SignalData {
 export type P2PMessage =
   | { type: 'chat'; id: string; text: string; ts: number }
   | { type: 'presence'; muted: boolean }
+  | PosMessage
+
+/**
+ * Where a person stands in the room's 2D world, in TILE units (not pixels), so the
+ * protocol never depends on rendering. Travels on the unreliable channel: a lost
+ * update is superseded by the next one, and a late one is worse than none.
+ */
+export interface PosMessage {
+  type: 'pos'
+  x: number
+  y: number
+  dir: 'up' | 'down' | 'left' | 'right'
+  moving: boolean
+}
+
+const DIRS = ['up', 'down', 'left', 'right']
+/** Generous upper bound; the world clamps to its real map size. Rejects NaN/Infinity/garbage. */
+const isCoord = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 500
 
 export type LinkState = 'connecting' | 'connected' | 'unstable' | 'failed' | 'closed'
 
@@ -33,6 +51,16 @@ export function parseP2PMessage(raw: unknown, chatMax: number): P2PMessage | nul
 
   if (m.type === 'presence' && typeof m.muted === 'boolean') {
     return { type: 'presence', muted: m.muted }
+  }
+  if (
+    m.type === 'pos' &&
+    isCoord(m.x) &&
+    isCoord(m.y) &&
+    typeof m.dir === 'string' &&
+    DIRS.includes(m.dir) &&
+    typeof m.moving === 'boolean'
+  ) {
+    return { type: 'pos', x: m.x, y: m.y, dir: m.dir as PosMessage['dir'], moving: m.moving }
   }
   if (
     m.type === 'chat' &&

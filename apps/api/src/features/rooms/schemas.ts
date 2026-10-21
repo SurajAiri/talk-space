@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   JOIN_CODE_REGEX,
   LANGUAGE_VALUES,
+  MAP_VALUES,
   PURPOSE_VALUES,
   ROOM_CONFIG,
 } from "../../config/rooms.config.js";
@@ -39,6 +40,7 @@ export const createRoomSchema = z.object({
     .max(ROOM_CONFIG.tags.max, `At most ${ROOM_CONFIG.tags.max} tags`)
     .default([])
     .transform((t) => [...new Set(t)]),
+  map: z.enum(MAP_VALUES).default("none"),
   visibility: z.enum(["public", "private"]),
 });
 

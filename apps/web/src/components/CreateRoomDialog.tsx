@@ -2,6 +2,7 @@ import { useEffect, useState, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { roomsApi, type RoomConfig } from '../lib/rooms'
+import type { RoomMapKey } from '../world/maps'
 
 interface Props {
   config: RoomConfig
@@ -17,6 +18,7 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
     language: config.languages[0]?.value ?? 'en',
     purpose: config.purposes[0]?.value ?? 'misc',
     tags: '',
+    map: 'none' as RoomMapKey,
     visibility: 'public' as 'public' | 'private',
   })
 
@@ -102,6 +104,22 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
             Tags (comma separated, up to {config.tags.max})
             <input value={form.tags} onChange={set('tags')} placeholder="rust, systems, compilers" />
           </label>
+          <label className="field">
+            Map
+            <select value={form.map} onChange={set('map')}>
+              {config.maps.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {form.map !== 'none' && (
+            <p className="hint">
+              People walk around the map. Inside a marked area everyone hears each other; out in the
+              open you only hear people near you. Chat reaches the whole room.
+            </p>
+          )}
           <fieldset className="field choice">
             <legend>Who can join</legend>
             <label>

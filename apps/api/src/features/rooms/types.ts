@@ -1,4 +1,4 @@
-import type { Purpose, Visibility } from "../../config/rooms.config.js";
+import type { Purpose, RoomMap, Visibility } from "../../config/rooms.config.js";
 
 /** Stored in Redis at room:{id} (JSON). Immutable after creation. */
 export interface RoomMeta {
@@ -8,6 +8,8 @@ export interface RoomMeta {
   language: string;
   purpose: Purpose;
   tags: string[];
+  /** Absent on rooms stored before maps existed; read it through `toView` (defaults to "none"). */
+  map?: RoomMap;
   visibility: Visibility;
   maxMembers: number;
   createdAt: number;
@@ -35,6 +37,7 @@ export interface RoomView {
   language: string;
   purpose: Purpose;
   tags: string[];
+  map: RoomMap;
   visibility: Visibility;
   maxMembers: number;
   createdAt: number;

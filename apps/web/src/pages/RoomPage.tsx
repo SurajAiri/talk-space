@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader'
 import ChatPanel from '../components/ChatPanel'
 import CopyButton from '../components/CopyButton'
 import ParticipantList from '../components/ParticipantList'
+import WorldView from '../components/WorldView'
 import { useRoomConfig } from '../hooks/useRoomConfig'
 import { labelFor, roomsApi, type RoomPreview } from '../lib/rooms'
 import { useRoomStore } from '../store/room.store'
@@ -214,6 +215,7 @@ function InRoom() {
   const peerCount = useRoomStore((s) => Object.keys(s.peers).length)
   const mic = useRoomStore((s) => s.mic)
   const muted = useRoomStore((s) => s.muted)
+  const world = useRoomStore((s) => s.world)
   const toggleMute = useRoomStore((s) => s.toggleMute)
   const enableMic = useRoomStore((s) => s.enableMic)
   const leave = useRoomStore((s) => s.leave)
@@ -228,13 +230,14 @@ function InRoom() {
   return (
     <div className="app app-room">
       <AppHeader />
-      <main className="room">
+      <main className={world ? 'room room-wide' : 'room'}>
         <header className="room-head">
           <div>
             <h1>{room.title}</h1>
             <div className="chips">
               <span className="chip">{labelFor(config?.languages, room.language)}</span>
               <span className="chip">{labelFor(config?.purposes, room.purpose)}</span>
+              {world && <span className="chip">🗺 {world.map.title}</span>}
               {room.tags.map((t) => (
                 <span key={t} className="chip chip-tag">
                   #{t}
@@ -260,8 +263,13 @@ function InRoom() {
           </p>
         )}
 
-        <div className="room-body">
-          <section className="panel" aria-label="People">
+        <div className={world ? 'room-body room-body-world' : 'room-body'}>
+          {world && (
+            <section className="panel panel-world" aria-label="World">
+              <WorldView session={world} />
+            </section>
+          )}
+          <section className="panel panel-people" aria-label="People">
             <h2>People</h2>
             <ParticipantList />
           </section>

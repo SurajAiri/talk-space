@@ -4,6 +4,8 @@ import { create } from 'zustand'
 import { connectSocket, disconnectSocket } from '../lib/socket'
 import { loadRoomConfig, type RoomView } from '../lib/rooms'
 import { NetworkManager } from '../webrtc/NetworkManager'
+import { loadWorldMap } from '../world/maps'
+import { WorldSession } from '../world/WorldSession'
 import type { LinkState, P2PMessage, PeerInfo } from '../webrtc/types'
 
 export type RoomStatus = 'idle' | 'joining' | 'joined' | 'reconnecting' | 'ended'
@@ -42,6 +44,8 @@ interface RoomState {
   messages: ChatMessage[]
   mic: MicState
   muted: boolean
+  /** The room's 2D world (positions + proximity audio). null for rooms without a map. */
+  world: WorldSession | null
   /** why the session ended (kicked, failed to re-join, ...) */
   endedReason: string | null
 
@@ -60,6 +64,7 @@ const initial = {
   messages: [] as ChatMessage[],
   mic: 'off' as MicState,
   muted: true,
+  world: null as WorldSession | null,
   endedReason: null,
 }
 
@@ -125,6 +130,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
   let manager: NetworkManager | null = null
   let localTrack: MediaStreamTrack | null = null
   let joinParams: { roomId: string; joinCode?: string } | null = null
+  let world: WorldSession | null = null
   let chatMax = 2000
   /** bumped on every join/leave so late async results from an old attempt are dropped */
   let generation = 0
@@ -153,6 +159,8 @@ export const useRoomStore = create<RoomState>()((set, get) => {
     generation++
     manager?.close()
     manager = null
+    world?.close() // stops its timer and every peer's audio
+    world = null
     stopMic()
     disconnectSocket()
     socket = null
@@ -161,7 +169,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
   function endSession(reason: string) {
     teardown()
-    set({ status: 'ended', endedReason: reason, peers: {}, mic: 'off', muted: true })
+    set({ status: 'ended', endedReason: reason, peers: {}, mic: 'off', muted: true, world: null })
   }
 
   function startNetwork(ack: JoinAck) {
@@ -173,7 +181,10 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       chatMax,
       handlers: {
         onPeerState: (id, link) => updatePeer(id, { link }),
-        onPeerStream: (id, stream) => updatePeer(id, { stream }),
+        onPeerStream: (id, stream) => {
+          updatePeer(id, { stream })
+          world?.onPeerStream(id, stream)
+        },
         onPeerMessage: (from, msg) => handlePeerMessage(from, msg),
       },
     })
@@ -183,7 +194,14 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
     const peers: Record<string, PeerView> = {}
     for (const p of ack.peers) peers[p.id] = { ...p, link: 'connecting', muted: true, stream: null }
-    set({ status: 'joined', room: ack.room, selfId: ack.self.id, peers })
+    // Rooms with a map get a world. A re-join after a connection drop keeps the same
+    // session so you reappear where you were standing.
+    const map = loadWorldMap(ack.room.map)
+    if (map) {
+      world ??= new WorldSession({ map, selfId: ack.self.id })
+      world.attach((msg) => void mgr.sendPosition(msg))
+    }
+    set({ status: 'joined', room: ack.room, selfId: ack.self.id, peers, world })
 
     // We are the newcomer: we dial everyone already inside.
     for (const p of ack.peers) mgr.connect(p.id, true)
@@ -191,6 +209,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
   function handlePeerMessage(from: string, msg: P2PMessage) {
     if (msg.type === 'presence') return updatePeer(from, { muted: msg.muted })
+    if (msg.type === 'pos') return world?.onRemotePosition(from, msg)
     const peer = get().peers[from]
     set((s) => ({
       messages: [
@@ -216,6 +235,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
     s.on('peer:left', ({ userId }: { userId: string }) => {
       manager?.disconnect(userId)
+      world?.onPeerLeft(userId)
       removePeer(userId)
     })
 
@@ -230,6 +250,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       if (get().status === 'joined') {
         manager?.close()
         manager = null
+        world?.detach() // peers are gone until we re-join; silence them and clear their avatars
         set({ status: 'reconnecting', peers: {} })
       }
     })
