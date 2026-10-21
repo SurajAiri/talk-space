@@ -18,7 +18,7 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
     language: config.languages[0]?.value ?? 'en',
     purpose: config.purposes[0]?.value ?? 'misc',
     tags: '',
-    map: 'none' as RoomMapKey,
+    map: 'commons' as RoomMapKey,
     visibility: 'public' as 'public' | 'private',
   })
 
@@ -114,12 +114,10 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
               ))}
             </select>
           </label>
-          {form.map !== 'none' && (
-            <p className="hint">
-              People walk around the map. Inside a marked area everyone hears each other; out in the
-              open you only hear people near you. Chat reaches the whole room.
-            </p>
-          )}
+          <p className="hint">
+            People walk around the map. Inside a marked area everyone hears each other; out in the open
+            you only hear people near you. Chat reaches the whole room.
+          </p>
           <fieldset className="field choice">
             <legend>Who can join</legend>
             <label>

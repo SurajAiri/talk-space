@@ -3,9 +3,9 @@ import { buildBeachMap } from './beach'
 import { buildCommonsMap } from './commons'
 import { buildMarketMap } from './market'
 
-/** Must match MAPS in apps/api/src/config/rooms.config.ts (minus "none"). */
+/** Must match MAPS in apps/api/src/config/rooms.config.ts. */
 export type WorldMapKey = 'commons' | 'beach' | 'market'
-export type RoomMapKey = 'none' | WorldMapKey
+export type RoomMapKey = WorldMapKey
 
 const builders: Record<WorldMapKey, () => WorldMap> = {
   commons: buildCommonsMap,
@@ -17,7 +17,9 @@ const builders: Record<WorldMapKey, () => WorldMap> = {
 const cache = new Map<WorldMapKey, WorldMap>()
 
 export function loadWorldMap(key: RoomMapKey | undefined): WorldMap | null {
-  if (!key || key === 'none' || !(key in builders)) return null // unknown key => plain room
+  // Defensive only: a server newer than this client may send a map key we don't know yet.
+  // Creation always requires a map, so this fallback (a plain voice/chat room) is not a feature.
+  if (!key || !(key in builders)) return null
   let map = cache.get(key)
   if (!map) {
     map = builders[key]()

@@ -1,4 +1,4 @@
-import { ROOM_CONFIG } from "../../config/rooms.config.js";
+import { DEFAULT_LEGACY_MAP, ROOM_CONFIG } from "../../config/rooms.config.js";
 import { AppError } from "../../utils/errors.js";
 import type { CreateRoomInput, ListRoomsInput } from "./schemas.js";
 import { generateJoinCode } from "./ids.js";
@@ -13,7 +13,7 @@ export function toView(
   const { joinCode, ...rest } = meta;
   return {
     ...rest,
-    map: rest.map ?? "none",
+    map: rest.map ?? DEFAULT_LEGACY_MAP,
     participantCount,
     ...(opts.includeJoinCode && joinCode ? { joinCode } : {}),
   };

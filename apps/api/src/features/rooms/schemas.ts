@@ -40,7 +40,7 @@ export const createRoomSchema = z.object({
     .max(ROOM_CONFIG.tags.max, `At most ${ROOM_CONFIG.tags.max} tags`)
     .default([])
     .transform((t) => [...new Set(t)]),
-  map: z.enum(MAP_VALUES).default("none"),
+  map: z.enum(MAP_VALUES),
   visibility: z.enum(["public", "private"]),
 });
 

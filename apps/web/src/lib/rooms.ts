@@ -27,7 +27,6 @@ export interface RoomView {
   language: string
   purpose: string
   tags: string[]
-  /** 'none' = plain voice/chat room */
   map: RoomMapKey
   visibility: 'public' | 'private'
   maxMembers: number

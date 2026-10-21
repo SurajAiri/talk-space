@@ -8,7 +8,7 @@ export interface RoomMeta {
   language: string;
   purpose: Purpose;
   tags: string[];
-  /** Absent on rooms stored before maps existed; read it through `toView` (defaults to "none"). */
+  /** Absent only on rooms stored before maps existed; read it through `toView`, which fills it in. */
   map?: RoomMap;
   visibility: Visibility;
   maxMembers: number;

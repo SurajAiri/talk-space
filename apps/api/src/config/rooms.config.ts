@@ -69,12 +69,11 @@ export const LANGUAGES = [
 ] as const;
 
 /**
- * The 2D world a room is held in. `none` = a plain voice/chat room (the original
- * behaviour). The server never needs map geometry: positions travel peer-to-peer,
- * so the server only stores and validates this key. Geometry lives in the web app.
+ * The 2D world every room is held in. The server never needs map geometry:
+ * positions travel peer-to-peer, so the server only stores and validates this key.
+ * Geometry lives in the web app (apps/web/src/world/maps), keep the keys in sync.
  */
 export const MAPS = [
-  { value: "none", label: "No map (voice & chat only)" },
   { value: "commons", label: "Courtyard Commons (café, rec room, studio, campfire)" },
   { value: "beach", label: "Sunset Beach (tiki deck, bonfire, pier)" },
   { value: "market", label: "Sky Night Market (conservatory, tea pavilion)" },
@@ -84,6 +83,8 @@ export type Purpose = (typeof PURPOSES)[number]["value"];
 export type RoomMap = (typeof MAPS)[number]["value"];
 export type Visibility = "public" | "private";
 
+/** Rooms stored before maps existed have no map; they are short-lived, so just give them this one. */
+export const DEFAULT_LEGACY_MAP: RoomMap = "commons";
 export const MAP_VALUES = MAPS.map((m) => m.value) as [RoomMap, ...RoomMap[]];
 export const PURPOSE_VALUES = PURPOSES.map((p) => p.value) as [Purpose, ...Purpose[]];
 export const LANGUAGE_VALUES = new Set<string>(LANGUAGES.map((l) => l.value));
