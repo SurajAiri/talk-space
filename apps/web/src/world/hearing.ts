@@ -1,4 +1,4 @@
-import type { WorldMap, Zone } from './types'
+import type { WorldMap, Zone } from './types.ts'
 
 /** Position in tile units (floats). */
 export interface Pos {

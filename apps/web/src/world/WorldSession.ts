@@ -1,9 +1,9 @@
-import type { PosMessage } from '../webrtc/types'
-import { hearingGain, zoneAt } from './hearing'
-import { isTileBlocked } from './navigation'
-import { ProximityMixer } from './ProximityMixer'
-import { hash32 } from './appearance'
-import { MAP_COLS, MAP_ROWS, type Dir, type WorldMap } from './types'
+import type { PosMessage } from '../webrtc/types.ts'
+import { hearingGain, zoneAt } from './hearing.ts'
+import { isTileBlocked } from './navigation.ts'
+import { ProximityMixer } from './ProximityMixer.ts'
+import { hash32 } from './appearance.ts'
+import type { Dir, WorldMap } from './types.ts'
 
 /** Tile units. */
 export interface PositionState {
@@ -77,8 +77,8 @@ export class WorldSession {
   onRemotePosition(id: string, msg: PosMessage) {
     // Untrusted input: keep it inside the map no matter what the peer claims.
     this.remotes.set(id, {
-      x: Math.min(Math.max(msg.x, 0), MAP_COLS - 0.01),
-      y: Math.min(Math.max(msg.y, 0), MAP_ROWS - 0.01),
+      x: Math.min(Math.max(msg.x, 0), this.map.cols - 0.01),
+      y: Math.min(Math.max(msg.y, 0), this.map.rows - 0.01),
       dir: msg.dir,
       moving: msg.moving,
     })

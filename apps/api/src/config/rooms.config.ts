@@ -68,24 +68,17 @@ export const LANGUAGES = [
   { value: "it", label: "Italian" },
 ] as const;
 
-/**
- * The 2D world every room is held in. The server never needs map geometry:
- * positions travel peer-to-peer, so the server only stores and validates this key.
- * Geometry lives in the web app (apps/web/src/world/maps), keep the keys in sync.
- */
-export const MAPS = [
-  { value: "commons", label: "Courtyard Commons (café, rec room, studio, campfire)" },
-  { value: "beach", label: "Sunset Beach (tiki deck, bonfire, pier)" },
-  { value: "market", label: "Sky Night Market (conservatory, tea pavilion)" },
-] as const;
-
 export type Purpose = (typeof PURPOSES)[number]["value"];
-export type RoomMap = (typeof MAPS)[number]["value"];
 export type Visibility = "public" | "private";
 
+/**
+ * Maps are content owned by the web app (apps/web/src/world/maps/data/*.map.json); the server
+ * deliberately knows nothing about them, so adding a map never touches this package.
+ * It only checks the key is a boring slug. Keep in sync with MAP_KEY_REGEX in the web app.
+ */
+export const MAP_KEY_REGEX = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 /** Rooms stored before maps existed have no map; they are short-lived, so just give them this one. */
-export const DEFAULT_LEGACY_MAP: RoomMap = "commons";
-export const MAP_VALUES = MAPS.map((m) => m.value) as [RoomMap, ...RoomMap[]];
+export const DEFAULT_LEGACY_MAP = "commons";
 export const PURPOSE_VALUES = PURPOSES.map((p) => p.value) as [Purpose, ...Purpose[]];
 export const LANGUAGE_VALUES = new Set<string>(LANGUAGES.map((l) => l.value));
 
@@ -104,6 +97,5 @@ export function publicRoomConfig() {
     chatMessageMax: ROOM_CONFIG.chatMessageMax,
     purposes: PURPOSES,
     languages: LANGUAGES,
-    maps: MAPS,
   };
 }

@@ -1,23 +1,23 @@
-import { MAP_COLS, MAP_ROWS, TILE, type WorldMap } from './types'
+import { tileById } from './assets/tiles.ts'
+import { TILE, type WorldMap } from './types.ts'
 
 const blockedCache = new WeakMap<WorldMap, Uint8Array>()
 
-/** Walls (5) and water (6) block, as do solid props. Computed once per map. */
+/** Solid tiles (walls, water, ...) and solid props block walking. Computed once per map. */
 function blockedGrid(map: WorldMap): Uint8Array {
   let b = blockedCache.get(map)
   if (b) return b
-  b = new Uint8Array(MAP_COLS * MAP_ROWS)
-  for (let r = 0; r < MAP_ROWS; r++) {
-    for (let c = 0; c < MAP_COLS; c++) {
-      const t = map.grid[r]?.[c]
-      if (t === 5 || t === 6) b[r * MAP_COLS + c] = 1
+  b = new Uint8Array(map.cols * map.rows)
+  for (let r = 0; r < map.rows; r++) {
+    for (let c = 0; c < map.cols; c++) {
+      if (tileById(map.grid[r]![c]!)?.solid) b[r * map.cols + c] = 1
     }
   }
   for (const p of map.props) {
     if (!p.solid) continue
     for (let r = p.row; r < p.row + p.h; r++) {
       for (let c = p.col; c < p.col + p.w; c++) {
-        if (r >= 0 && r < MAP_ROWS && c >= 0 && c < MAP_COLS) b[r * MAP_COLS + c] = 1
+        if (r >= 0 && r < map.rows && c >= 0 && c < map.cols) b[r * map.cols + c] = 1
       }
     }
   }
@@ -26,8 +26,8 @@ function blockedGrid(map: WorldMap): Uint8Array {
 }
 
 export function isTileBlocked(map: WorldMap, col: number, row: number): boolean {
-  if (col < 0 || col >= MAP_COLS || row < 0 || row >= MAP_ROWS) return true
-  return blockedGrid(map)[row * MAP_COLS + col] === 1
+  if (col < 0 || col >= map.cols || row < 0 || row >= map.rows) return true
+  return blockedGrid(map)[row * map.cols + col] === 1
 }
 
 export interface Waypoint {
@@ -47,8 +47,9 @@ export function findPath(
   if (isTileBlocked(map, to.col, to.row)) return null
   if (from.col === to.col && from.row === to.row) return []
 
-  const idx = (c: number, r: number) => r * MAP_COLS + c
-  const prev = new Int32Array(MAP_COLS * MAP_ROWS).fill(-2) // -2 unvisited, -1 start
+  const COLS = map.cols
+  const idx = (c: number, r: number) => r * COLS + c
+  const prev = new Int32Array(COLS * map.rows).fill(-2) // -2 unvisited, -1 start
   const queue: number[] = [idx(from.col, from.row)]
   prev[queue[0]!] = -1
   const goal = idx(to.col, to.row)
@@ -59,8 +60,8 @@ export function findPath(
 
   for (let head = 0; head < queue.length && prev[goal] === -2; head++) {
     const cur = queue[head]!
-    const c = cur % MAP_COLS
-    const r = Math.floor(cur / MAP_COLS)
+    const c = cur % COLS
+    const r = Math.floor(cur / COLS)
     for (const [dc, dr] of steps) {
       const nc = c + dc
       const nr = r + dr
@@ -78,7 +79,30 @@ export function findPath(
   const path: Waypoint[] = []
   for (let cur = goal; cur !== -1; cur = prev[cur]!) {
     if (prev[cur] === -1) break // reached the start tile; it is not a waypoint
-    path.push({ x: ((cur % MAP_COLS) + 0.5) * TILE, y: (Math.floor(cur / MAP_COLS) + 0.5) * TILE })
+    path.push({ x: ((cur % COLS) + 0.5) * TILE, y: (Math.floor(cur / COLS) + 0.5) * TILE })
   }
   return path.reverse()
+}
+
+/** Flood fill (4-way) of every tile reachable by walking from `from`. 1 = reachable. */
+export function reachableFrom(map: WorldMap, from: { col: number; row: number }): Uint8Array {
+  const seen = new Uint8Array(map.cols * map.rows)
+  if (isTileBlocked(map, from.col, from.row)) return seen
+  const stack = [from.row * map.cols + from.col]
+  seen[stack[0]!] = 1
+  while (stack.length) {
+    const cur = stack.pop()!
+    const c = cur % map.cols
+    const r = Math.floor(cur / map.cols)
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nc = c + dc
+      const nr = r + dr
+      if (isTileBlocked(map, nc, nr)) continue
+      const n = nr * map.cols + nc
+      if (seen[n]) continue
+      seen[n] = 1
+      stack.push(n)
+    }
+  }
+  return seen
 }

@@ -1,4 +1,5 @@
 import { labelFor, type RoomConfig, type RoomView } from '../lib/rooms'
+import { loadWorldMap } from '../world/maps'
 
 interface Props {
   room: RoomView
@@ -16,9 +17,7 @@ export default function RoomCard({ room, config, onJoin }: Props) {
         <div className="chips">
           <span className="chip">{labelFor(config?.languages, room.language)}</span>
           <span className="chip">{labelFor(config?.purposes, room.purpose)}</span>
-          {room.map && (
-            <span className="chip">🗺 {labelFor(config?.maps, room.map).split(' (')[0]}</span>
-          )}
+          {room.map && <span className="chip">🗺 {loadWorldMap(room.map)?.title ?? room.map}</span>}
           {room.tags.map((t) => (
             <span key={t} className="chip chip-tag">
               #{t}

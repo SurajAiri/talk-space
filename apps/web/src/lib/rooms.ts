@@ -17,7 +17,6 @@ export interface RoomConfig {
   chatMessageMax: number
   purposes: Option[]
   languages: Option[]
-  maps: Option[]
 }
 
 export interface RoomView {

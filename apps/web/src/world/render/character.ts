@@ -1,5 +1,5 @@
 // Ported from the GatherSpace template (pure canvas drawing, no engine dependency).
-import type { Character } from '../types'
+import type { Character } from '../types.ts'
 
 export function drawCharacter(
   g: CanvasRenderingContext2D,

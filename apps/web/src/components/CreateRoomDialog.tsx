@@ -2,12 +2,15 @@ import { useEffect, useState, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { roomsApi, type RoomConfig } from '../lib/rooms'
-import type { RoomMapKey } from '../world/maps'
+import { listWorldMaps, type RoomMapKey } from '../world/maps'
 
 interface Props {
   config: RoomConfig
   onClose: () => void
 }
+
+/** Every map file in world/maps/data/, discovered at build time. */
+const maps = listWorldMaps()
 
 export default function CreateRoomDialog({ config, onClose }: Props) {
   const navigate = useNavigate()
@@ -18,7 +21,7 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
     language: config.languages[0]?.value ?? 'en',
     purpose: config.purposes[0]?.value ?? 'misc',
     tags: '',
-    map: 'commons' as RoomMapKey,
+    map: (maps[0]?.key ?? '') as RoomMapKey,
     visibility: 'public' as 'public' | 'private',
   })
 
@@ -107,9 +110,9 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
           <label className="field">
             Map
             <select value={form.map} onChange={set('map')}>
-              {config.maps.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
+              {maps.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.title}
                 </option>
               ))}
             </select>

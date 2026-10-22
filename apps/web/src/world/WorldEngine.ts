@@ -1,11 +1,10 @@
-import { appearanceFor } from './appearance'
-import { HEARING, hearingGain, zoneAt } from './hearing'
-import { findPath, isTileBlocked, type Waypoint } from './navigation'
-import { drawCharacter, drawCharacterOverlays } from './render/character'
-import { drawPropItem } from './render/props'
-import { drawWorldTiles } from './render/tiles'
-import { MAP_COLS, MAP_ROWS, TILE, type Character, type Seat } from './types'
-import type { WorldSession } from './WorldSession'
+import { appearanceFor } from './appearance.ts'
+import { HEARING, hearingGain, zoneAt } from './hearing.ts'
+import { findPath, isTileBlocked, type Waypoint } from './navigation.ts'
+import { drawCharacter, drawCharacterOverlays } from './render/character.ts'
+import { drawPropItem, drawWorldTiles } from './render/scene.ts'
+import { TILE, type Character, type Seat } from './types.ts'
+import type { WorldSession } from './WorldSession.ts'
 
 /**
  * 198 px/s == the template's 3.3 px per frame at 60 fps. The template moved a fixed
@@ -318,8 +317,8 @@ export class WorldEngine {
   private render(time: number) {
     const { ctx, canvas, session, zoom, dpr } = this
     const map = session.map
-    const mapW = MAP_COLS * TILE
-    const mapH = MAP_ROWS * TILE
+    const mapW = map.cols * TILE
+    const mapH = map.rows * TILE
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.fillStyle = '#0f172a'
@@ -335,9 +334,9 @@ export class WorldEngine {
     ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, (this.cssW / 2 - cx * zoom) * dpr, (this.cssH / 2 - cy * zoom) * dpr)
 
     const startCol = Math.max(0, Math.floor((cx - viewW / 2) / TILE) - 1)
-    const endCol = Math.min(MAP_COLS - 1, Math.ceil((cx + viewW / 2) / TILE) + 1)
+    const endCol = Math.min(map.cols - 1, Math.ceil((cx + viewW / 2) / TILE) + 1)
     const startRow = Math.max(0, Math.floor((cy - viewH / 2) / TILE) - 1)
-    const endRow = Math.min(MAP_ROWS - 1, Math.ceil((cy + viewH / 2) / TILE) + 1)
+    const endRow = Math.min(map.rows - 1, Math.ceil((cy + viewH / 2) / TILE) + 1)
 
     drawWorldTiles(ctx, map.grid, startCol, endCol, startRow, endRow, time)
     this.drawHearingGuides()

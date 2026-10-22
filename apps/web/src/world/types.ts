@@ -1,7 +1,5 @@
 /** World coordinates: 1 tile = TILE pixels. Network messages use TILE units so they never depend on rendering. */
 export const TILE = 48
-export const MAP_COLS = 44
-export const MAP_ROWS = 32
 
 export type Dir = 'up' | 'down' | 'left' | 'right'
 export const DIRS: readonly Dir[] = ['up', 'down', 'left', 'right']
@@ -23,8 +21,10 @@ export interface Prop {
   type: string
   solid: boolean
   seat?: Seat
+  /** named look from the prop's catalog entry (e.g. tree: oak | sakura) */
+  variant?: string
+  /** tint, only for props whose catalog entry declares a default colour */
   color?: string
-  kind?: string
 }
 
 /** Inclusive tile rectangle. */
@@ -49,6 +49,10 @@ export interface Zone {
 export interface WorldMap {
   key: string
   title: string
+  description?: string
+  cols: number
+  rows: number
+  /** tile ids, grid[row][col] */
   grid: number[][]
   props: Prop[]
   seats: Seat[]

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { Toaster } from 'sonner'
 import { ProtectedRoute, PublicOnlyRoute } from './components/RouteGuards'
@@ -8,6 +8,10 @@ import LobbyPage from './pages/LobbyPage'
 import ProfilePage from './pages/ProfilePage'
 import RoomPage from './pages/RoomPage'
 import { useAuthStore } from './store/auth.store'
+
+// Dev-only map editor. `import.meta.env.DEV` is a build-time constant, so production bundles
+// contain neither this route nor the editor code.
+const MapEditorPage = import.meta.env.DEV ? lazy(() => import('./pages/dev/MapEditorPage')) : null
 
 export default function App() {
   const loadUser = useAuthStore((s) => s.loadUser)
@@ -29,6 +33,16 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/room/:roomId" element={<RoomPage />} />
         </Route>
+        {MapEditorPage && (
+          <Route
+            path="/dev/maps"
+            element={
+              <Suspense fallback={null}>
+                <MapEditorPage />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
       <Toaster richColors position="top-right" />
