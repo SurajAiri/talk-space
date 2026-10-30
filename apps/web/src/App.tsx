@@ -21,6 +21,25 @@ export default function App() {
     if (!window.location.pathname.startsWith('/auth/callback')) void loadUser()
   }, [loadUser])
 
+  // Tokens are short-lived (1 h). Swap for a fresh one well before expiry, and again when the
+  // tab wakes up after a long sleep, so people are never logged out in the middle of a conversation.
+  useEffect(() => {
+    const refresh = () => void useAuthStore.getState().refresh()
+    const timer = setInterval(refresh, 20 * 60 * 1000)
+    let last = Date.now()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - last > 20 * 60 * 1000) {
+        last = Date.now()
+        refresh()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>

@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "maps": "node tools/maps.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"scripts/*.test.ts\"",
     "preview": "vite preview"
   },
   "dependencies": {

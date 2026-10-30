@@ -73,7 +73,15 @@ export const roomIdParamSchema = z.object({ roomId });
 export const joinPayloadSchema = z.object({
   roomId,
   joinCode: joinCode.optional(),
+  /**
+   * Random id the browser tab invents once per page load. It lets the server tell
+   * "the same tab reconnecting after a network blip" (keep everyone's peer-to-peer
+   * links) from "a fresh tab or a reload" (peers must build new links).
+   */
+  sessionId: z.string().min(8).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
 });
+
+export const kickPayloadSchema = z.object({ userId: z.uuid() });
 
 export const signalPayloadSchema = z.object({
   to: z.uuid(),
@@ -88,8 +96,10 @@ export const signalPayloadSchema = z.object({
           usernameFragment: z.string().nullable().optional(),
         })
         .optional(),
+      /** "my link to you failed for good: drop yours, we start over" (see NetworkManager) */
+      reset: z.literal(true).optional(),
     })
-    .refine((d) => d.description || d.candidate, "Empty signal"),
+    .refine((d) => d.description || d.candidate || d.reset, "Empty signal"),
 });
 
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;

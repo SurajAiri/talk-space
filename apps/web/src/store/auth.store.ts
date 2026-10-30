@@ -20,7 +20,11 @@ interface AuthState {
     password: string
   }) => Promise<void>
   signInWithGoogle: () => Promise<void>
+  /** Swaps the current token for a fresh one. Tokens are short-lived, so this runs quietly in the background. */
+  refresh: () => Promise<void>
   logout: () => void
+  /** Ends every session of this account, on every device. */
+  logoutEverywhere: () => Promise<void>
 }
 
 // Only the token is persisted; the user is re-fetched from /users/me.
@@ -41,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await api<User>('/users/me', { token })
           set({ user, initializing: false })
+          void get().refresh()
         } catch (err) {
           // invalid/expired token -> logged out; other errors keep the token
           if (err instanceof ApiError && err.status === 401) {
@@ -91,7 +96,28 @@ export const useAuthStore = create<AuthState>()(
         if (error) throw new Error(error.message ?? 'Failed to continue with Google')
       },
 
+      refresh: async () => {
+        const { token } = get()
+        if (!token) return
+        try {
+          const res = await api<{ token: string }>('/auth/refresh', { method: 'POST', body: {}, token })
+          // only swap if nothing changed underneath us (logout, another refresh)
+          if (get().token === token) set({ token: res.token })
+        } catch (err) {
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            set({ token: null, user: null })
+          }
+          // network errors / rate limits: keep the current token, try again later
+        }
+      },
+
       logout: () => set({ token: null, user: null }),
+
+      logoutEverywhere: async () => {
+        const { token } = get()
+        if (token) await api('/auth/logout-everywhere', { method: 'POST', body: {}, token })
+        set({ token: null, user: null })
+      },
     }),
     {
       name: 'auth',

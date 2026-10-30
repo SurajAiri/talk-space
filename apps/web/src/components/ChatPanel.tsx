@@ -5,10 +5,13 @@ const time = (ts: number) =>
   new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 export default function ChatPanel({ maxLength }: { maxLength: number }) {
-  const messages = useRoomStore((s) => s.messages)
+  const allMessages = useRoomStore((s) => s.messages)
+  const blocked = useRoomStore((s) => s.blocked)
+  const messages = allMessages.filter((m) => m.self || !blocked[m.fromId])
   const peerCount = useRoomStore((s) => Object.keys(s.peers).length)
   const sendChat = useRoomStore((s) => s.sendChat)
   const [text, setText] = useState('')
+  const [slow, setSlow] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -18,7 +21,9 @@ export default function ChatPanel({ maxLength }: { maxLength: number }) {
 
   function onSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (sendChat(text)) setText('')
+    const result = sendChat(text)
+    setSlow(result === 'slow-down')
+    if (result === 'sent') setText('')
   }
 
   return (
@@ -40,6 +45,11 @@ export default function ChatPanel({ maxLength }: { maxLength: number }) {
           </div>
         ))}
       </div>
+      {slow && (
+        <p className="hint" role="status">
+          You&apos;re sending messages too fast. Wait a moment.
+        </p>
+      )}
       <form className="chat-form" onSubmit={onSubmit}>
         <input
           aria-label="Message"

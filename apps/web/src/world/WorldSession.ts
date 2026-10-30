@@ -21,6 +21,15 @@ export interface HudSnapshot {
 
 const TICK_MS = 100
 const HEARTBEAT_MS = 1000
+/**
+ * Fastest a remote avatar may move. Positions come from other people's browsers, so a modified
+ * client could claim to teleport next to anyone. Honest movement is far below this; anything faster
+ * is turned into a fast walk toward the claimed spot rather than believed.
+ */
+const MAX_REMOTE_SPEED = 14 // tiles per second
+const SPEED_SLACK = 1.5 // tiles: network jitter, bursts after a hidden tab wakes up
+/** Stop sending our voice to someone only after they have been out of earshot this long (no flapping at the edge). */
+const AUDIO_OFF_DELAY_MS = 1000
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -41,6 +50,12 @@ export class WorldSession {
   readonly local: PositionState
 
   private send: ((msg: PosMessage) => void) | null = null
+  private audioGate: ((id: string, on: boolean) => void) | null = null
+  private blocked: ReadonlySet<string> = new Set()
+  private readonly remoteSeenAt = new Map<string, number>()
+  /** what we last told the network about each peer's audio, and since when they have been out of range */
+  private readonly gated = new Map<string, boolean>()
+  private readonly outOfRangeSince = new Map<string, number>()
   private lastSent: PositionState | null = null
   private lastSentAt = 0
   private timer: ReturnType<typeof setInterval> | null = null
@@ -56,8 +71,9 @@ export class WorldSession {
   }
 
   /** (Re)bind to a fresh network. Anything learned from the old one is stale. */
-  attach(send: (msg: PosMessage) => void) {
+  attach(send: (msg: PosMessage) => void, audioGate?: (id: string, on: boolean) => void) {
     this.send = send
+    this.audioGate = audioGate ?? null
     this.lastSent = null // force an immediate broadcast to the new peers
     this.clearRemotes()
   }
@@ -65,23 +81,46 @@ export class WorldSession {
   /** Network is gone (reconnecting). Peers are unknown until we re-join. */
   detach() {
     this.send = null
+    this.audioGate = null
     this.clearRemotes()
+  }
+
+  /** People this browser ignores: silent, and they get none of our voice either. */
+  setBlockedIds(ids: ReadonlySet<string>) {
+    this.blocked = new Set(ids)
+    this.updateHearing()
   }
 
   clearRemotes() {
     this.remotes.clear()
+    this.remoteSeenAt.clear()
+    this.gated.clear()
+    this.outOfRangeSince.clear()
     this.mixer.detachAll()
     this.publish()
   }
 
   onRemotePosition(id: string, msg: PosMessage) {
-    // Untrusted input: keep it inside the map no matter what the peer claims.
-    this.remotes.set(id, {
-      x: Math.min(Math.max(msg.x, 0), this.map.cols - 0.01),
-      y: Math.min(Math.max(msg.y, 0), this.map.rows - 0.01),
-      dir: msg.dir,
-      moving: msg.moving,
-    })
+    // Untrusted input: keep it inside the map no matter what the peer claims...
+    let x = Math.min(Math.max(msg.x, 0), this.map.cols - 0.01)
+    let y = Math.min(Math.max(msg.y, 0), this.map.rows - 0.01)
+
+    // ...and don't let it teleport: limit how far it can move since we last heard from it.
+    const prev = this.remotes.get(id)
+    const now = performance.now()
+    const before = this.remoteSeenAt.get(id)
+    if (prev && before !== undefined) {
+      const allowed = MAX_REMOTE_SPEED * ((now - before) / 1000) + SPEED_SLACK
+      const dx = x - prev.x
+      const dy = y - prev.y
+      const dist = Math.hypot(dx, dy)
+      if (dist > allowed) {
+        x = prev.x + (dx / dist) * allowed
+        y = prev.y + (dy / dist) * allowed
+      }
+    }
+    this.remoteSeenAt.set(id, now)
+    this.remotes.set(id, { x, y, dir: msg.dir, moving: msg.moving })
   }
 
   onPeerStream(id: string, stream: MediaStream) {
@@ -91,6 +130,9 @@ export class WorldSession {
 
   onPeerLeft(id: string) {
     this.remotes.delete(id)
+    this.remoteSeenAt.delete(id)
+    this.gated.delete(id)
+    this.outOfRangeSince.delete(id)
     this.mixer.detach(id)
     this.publish()
   }
@@ -131,13 +173,42 @@ export class WorldSession {
 
   private updateHearing() {
     const hearing: Record<string, number> = {}
+    const now = performance.now()
     for (const [id, remote] of this.remotes) {
-      const g = hearingGain(this.map, this.local, remote)
+      const blocked = this.blocked.has(id)
+      const g = blocked ? 0 : hearingGain(this.map, this.local, remote)
       hearing[id] = g
       this.mixer.setGain(id, g)
+      this.gateAudio(id, g > 0, blocked, now)
     }
     this.hud = { zoneName: zoneAt(this.map, this.local.x, this.local.y)?.name ?? null, hearing }
     this.publish()
+  }
+
+  /**
+   * Hearing is symmetrical, so we can work out whether this person can hear us. If not, our
+   * browser stops sending them our voice at all: nothing is uploaded for people out of earshot
+   * (this is what keeps a crowded mesh affordable), and an unmodified client there receives
+   * nothing. A modified client could lie about its position to be sent audio, so this is a bandwidth and
+   * comfort feature, not a hard privacy wall: only a server in the audio path could be one.
+   */
+  private gateAudio(id: string, inRange: boolean, blocked: boolean, now: number) {
+    if (!this.audioGate) return
+    let on: boolean
+    if (inRange) {
+      this.outOfRangeSince.delete(id)
+      on = true
+    } else if (blocked) {
+      on = false
+    } else {
+      const since = this.outOfRangeSince.get(id) ?? now
+      this.outOfRangeSince.set(id, since)
+      on = now - since < AUDIO_OFF_DELAY_MS && this.gated.get(id) === true
+    }
+    if (this.gated.get(id) !== on) {
+      this.gated.set(id, on)
+      this.audioGate(id, on)
+    }
   }
 
   /** Only wake React when something a person would notice changed. */

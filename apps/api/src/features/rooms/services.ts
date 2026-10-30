@@ -40,20 +40,24 @@ export async function listPublicRooms(filter: ListRoomsInput) {
 }
 
 /** Minimal, safe-to-show info used by the pre-join screen. */
-export async function previewRoom(roomId: string) {
+export async function previewRoom(userId: string, roomId: string) {
+  const { count: previews } = await store.bumpCounterFor(`preview:${userId}`, 60);
+  if (previews > ROOM_CONFIG.previewsPerMinute) {
+    throw new AppError(429, "Too many requests. Slow down a little.");
+  }
   const meta = await store.getMeta(roomId);
   if (!meta) throw new AppError(404, "Room not found. It may have ended.");
-  const count = await store.participantCount(roomId);
 
+  // Private rooms reveal nothing beyond "it exists and needs a code": not even who or how many.
   if (meta.visibility === "private") {
     return {
       id: meta.id,
       visibility: "private" as const,
       requiresJoinCode: true,
-      participantCount: count,
       maxMembers: meta.maxMembers,
     };
   }
+  const count = await store.participantCount(roomId);
   return {
     ...toView(meta, count, { includeJoinCode: false }),
     requiresJoinCode: false,
@@ -71,8 +75,9 @@ export async function joinRoom(args: {
   joinCode?: string;
   user: { id: string; name: string; username: string };
   socketId: string;
+  sessionId?: string;
 }): Promise<JoinOutcome> {
-  const { roomId, joinCode, user, socketId } = args;
+  const { roomId, joinCode, user, socketId, sessionId } = args;
 
   const meta = await store.getMeta(roomId);
   if (!meta) return fail("ROOM_NOT_FOUND", "Room not found. It may have ended.");
@@ -93,7 +98,7 @@ export async function joinRoom(args: {
     if (!meta.joinCode || !store.codesMatch(meta.joinCode, joinCode)) {
       await Promise.all([
         store.bump(userKey, ROOM_CONFIG.joinAttemptWindowSeconds),
-        store.bump(roomKey, ROOM_CONFIG.joinAttemptWindowSeconds),
+        store.bump(roomKey, ROOM_CONFIG.joinAttemptsPerRoomWindowSeconds),
       ]);
       return fail("INVALID_JOIN_CODE", "That join code is wrong.");
     }
@@ -104,9 +109,13 @@ export async function joinRoom(args: {
     name: user.name,
     username: user.username,
     socketId,
+    sessionId,
     joinedAt: Date.now(),
   };
   const result = await store.addMember(meta, member);
+  if (result.status === "banned") {
+    return fail("REMOVED_FROM_ROOM", "The host removed you from this room.");
+  }
   if (result.status !== "joined") {
     return result.status === "full"
       ? fail("ROOM_FULL", `This room is full (${meta.maxMembers} people).`)
@@ -120,6 +129,33 @@ export async function joinRoom(args: {
     peers: members.filter((m) => m.id !== user.id).map(store.toPeer),
     replaced: result.previous,
   };
+}
+
+export type KickOutcome =
+  | { ok: true; socketId: string | null }
+  | { ok: false; message: string };
+
+/**
+ * The host removes someone. Connection bookkeeping only: nothing the person said or
+ * sent is ever seen by the server. Takes effect immediately and keeps them out for a while.
+ */
+export async function kickFromRoom(args: {
+  roomId: string;
+  hostId: string;
+  targetId: string;
+}): Promise<KickOutcome> {
+  const { roomId, hostId, targetId } = args;
+  const meta = await store.getMeta(roomId);
+  if (!meta) return { ok: false, message: "Room not found. It may have ended." };
+  if (meta.createdBy !== hostId) return { ok: false, message: "Only the person who created the room can remove people." };
+  if (targetId === hostId) return { ok: false, message: "You can't remove yourself. Leave the room instead." };
+  return { ok: true, socketId: await store.kickMember(roomId, targetId) };
+}
+
+/** Both people are in this room right now (used to validate abuse reports). */
+export async function bothInRoom(roomId: string, a: string, b: string): Promise<boolean> {
+  const [ma, mb] = await Promise.all([store.getMember(roomId, a), store.getMember(roomId, b)]);
+  return Boolean(ma && mb);
 }
 
 /** `graceful` = the user pressed Leave (delete an empty room right away). */

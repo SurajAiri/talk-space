@@ -25,7 +25,7 @@ export function getConfig(_req: Request, res: Response) {
 
 export async function create(req: Request, res: Response) {
   const input = parse(createRoomSchema, req.body);
-  const room = await roomService.createRoom(req.user!.id, input);
+  const room = await roomService.createRoom(req.auth!.id, input);
   res.sendResponse(201, room, "Room created");
 }
 
@@ -36,5 +36,5 @@ export async function list(req: Request, res: Response) {
 
 export async function preview(req: Request, res: Response) {
   const { roomId } = parse(roomIdParamSchema, req.params);
-  res.sendResponse(200, await roomService.previewRoom(roomId));
+  res.sendResponse(200, await roomService.previewRoom(req.auth!.id, roomId));
 }

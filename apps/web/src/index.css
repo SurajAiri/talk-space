@@ -179,7 +179,7 @@ a.btn { text-decoration: none; display: block; text-align: center; }
   display: flex; flex-direction: column; gap: 10px; min-height: 0;
 }
 .people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
-.person { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: 8px; }
+.person { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 6px; border-radius: 8px; }
 .person-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .person-sub { font-size: 0.78rem; color: var(--muted); }
 .person-mic { font-size: 0.8rem; color: var(--muted); }
@@ -281,3 +281,8 @@ a.btn { text-decoration: none; display: block; text-align: center; }
 .me-issues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .me-issues li { padding: 4px 6px; border-radius: 6px; font-size: 0.78rem; border-left: 3px solid var(--warn); background: var(--bg); }
 .me-issues li.error { border-left-color: var(--danger); }
+
+/* people: block / report / remove */
+.peer-actions { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; margin-top: 6px; }
+.btn-small { padding: 4px 10px; font-size: 0.8rem; }
+.peer-report { display: flex; flex-direction: column; gap: 6px; flex-basis: 100%; }

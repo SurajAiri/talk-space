@@ -24,6 +24,8 @@ export interface Member {
   name: string;
   username: string;
   socketId: string;
+  /** which browser tab (page load) holds the seat; see joinPayloadSchema */
+  sessionId?: string;
   joinedAt: number;
 }
 
@@ -54,4 +56,5 @@ export type JoinErrorCode =
   | "INVALID_JOIN_CODE"
   | "TOO_MANY_ATTEMPTS"
   | "ALREADY_IN_ROOM"
+  | "REMOVED_FROM_ROOM"
   | "INTERNAL";

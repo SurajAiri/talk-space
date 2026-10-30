@@ -28,13 +28,30 @@ server.listen(env.PORT, () => {
   console.log(`Server is running on port ${env.PORT}`);
 });
 
-function shutdown(signal: string) {
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`${signal} received, shutting down...`);
-  void io.close(async () => {
+
+  // never hang forever on a stuck connection
+  const force = setTimeout(() => {
+    console.error("Shutdown timed out, forcing exit");
+    process.exit(1);
+  }, 10_000);
+  force.unref();
+
+  try {
+    // stop taking new HTTP requests, then drop sockets (this also closes the HTTP server)
+    server.closeIdleConnections();
+    await io.closeAll();
     await Promise.allSettled([pool.end(), redis.quit()]);
     process.exit(0);
-  });
+  } catch (err) {
+    console.error("Error during shutdown", err);
+    process.exit(1);
+  }
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));

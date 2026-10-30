@@ -1,4 +1,5 @@
 import {
+  boolean,
   doublePrecision,
   integer,
   pgEnum,
@@ -30,6 +31,11 @@ export const users = pgTable("users", {
   strikes: integer("strikes").notNull().default(0),
   status: userStatusEnum("status").notNull().default("active"),
   userType: userTypeEnum("user_type").notNull().default("user"),
+  // true once the address is proven to belong to this person (Google says so).
+  // Password sign-ups start unverified: nobody has checked the address yet.
+  emailVerified: boolean("email_verified").notNull().default(false),
+  // Bumped to invalidate every token issued before (ban, password reset, "log out everywhere").
+  tokenVersion: integer("token_version").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(), // joined date
   updatedAt: timestamp("updated_at")
     .notNull()

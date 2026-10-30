@@ -14,6 +14,11 @@ function parse<T>(schema: { safeParse: (d: unknown) => any }, body: unknown): T 
   return result.data as T;
 }
 
+/** Tells the web app which sign-in buttons to show. */
+export function providers(_req: Request, res: Response) {
+  res.sendResponse(200, { google: env.GOOGLE_ENABLED });
+}
+
 export async function register(req: Request, res: Response) {
   const input = parse<ReturnType<typeof registerSchema.parse>>(
     registerSchema,
@@ -32,6 +37,16 @@ export async function login(req: Request, res: Response) {
   res.sendResponse(200, result, "Logged in");
 }
 
+export async function refresh(req: Request, res: Response) {
+  const result = await authService.refresh(req.auth!.id);
+  res.sendResponse(200, result, "Refreshed");
+}
+
+export async function logoutEverywhere(req: Request, res: Response) {
+  await authService.logoutEverywhere(req.auth!.id);
+  res.sendResponse(200, null, "Logged out everywhere");
+}
+
 /**
  * Google redirects back here (via better-auth) after the OAuth handshake.
  * If the Google account already exists we log in, otherwise we create the
@@ -40,6 +55,8 @@ export async function login(req: Request, res: Response) {
 export async function googleComplete(req: Request, res: Response) {
   const fail = (msg: string) =>
     res.redirect(`${env.WEB_URL}/auth?error=${encodeURIComponent(msg)}`);
+
+  if (!env.GOOGLE_ENABLED) return fail("Google login is not enabled");
 
   const session = await googleAuth.api.getSession({
     headers: fromNodeHeaders(req.headers),
@@ -50,6 +67,7 @@ export async function googleComplete(req: Request, res: Response) {
     const { token } = await authService.loginWithGoogle({
       email: session.user.email,
       name: session.user.name,
+      emailVerified: session.user.emailVerified === true,
     });
     res.redirect(`${env.WEB_URL}/auth/callback#token=${token}`);
   } catch (err) {

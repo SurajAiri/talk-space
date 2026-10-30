@@ -1,3 +1,4 @@
+import { env } from "./env.js";
 /**
  * Central room configuration. Change values here (or via env) and both the API
  * and the web app pick them up: the web app reads them from GET /api/v1/rooms/config.
@@ -15,19 +16,33 @@ export const ROOM_CONFIG = {
 
   /** Public room id: letters only, shown upper-case, accepted case-insensitively. */
   idLength: 6,
-  /** Private room join code: digits only. */
-  joinCodeLength: 6,
+  /** Private room join code: digits only. 8 digits = 100M combinations. */
+  joinCodeLength: 8,
 
   /** A freshly created room is deleted if nobody joins within this window. */
   createJoinWindowSeconds: 120,
   /** After the last member drops (tab closed / network lost) the room survives this long. */
   emptyGraceSeconds: 30,
+  /**
+   * A dropped connection keeps its seat this long, so a network blip does not
+   * kick you out of the room or tear down your peer-to-peer links.
+   */
+  seatGraceSeconds: intFromEnv("SEAT_GRACE_SECONDS", 15),
 
   /** Wrong join-code guesses allowed per user per room within the window. */
   joinAttemptsPerUser: 5,
-  /** Wrong join-code guesses allowed per room (all users together) within the window. */
-  joinAttemptsPerRoom: 30,
   joinAttemptWindowSeconds: 600,
+  /** Wrong join-code guesses allowed per room (all users together) within its own, longer window. */
+  joinAttemptsPerRoom: 30,
+  joinAttemptsPerRoomWindowSeconds: 3600,
+
+  /** Room previews (GET /rooms/:id) per user per minute: stops probing for private room ids. */
+  previewsPerMinute: 60,
+
+  /** Reports a user may file per hour. */
+  reportsPerHour: 10,
+  /** Rooms the creator has banned someone from are remembered this long. */
+  kickBanSeconds: 6 * 3600,
 
   /** Rooms a single user may create within `createWindowSeconds`. */
   createsPerWindow: 5,
@@ -95,6 +110,8 @@ export function publicRoomConfig() {
     shortDescriptionMax: ROOM_CONFIG.shortDescriptionMax,
     tags: ROOM_CONFIG.tags,
     chatMessageMax: ROOM_CONFIG.chatMessageMax,
+    relayAvailable: env.TURN_URLS.length > 0,
+    forceRelay: env.FORCE_RELAY,
     purposes: PURPOSES,
     languages: LANGUAGES,
   };

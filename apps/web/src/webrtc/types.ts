@@ -8,6 +8,8 @@ export interface PeerInfo {
 export interface SignalData {
   description?: RTCSessionDescriptionInit
   candidate?: RTCIceCandidateInit
+  /** "my link to you failed for good: drop yours, we start over" */
+  reset?: true
 }
 
 /** Everything that travels peer-to-peer over the data channel. */

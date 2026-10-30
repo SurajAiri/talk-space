@@ -88,6 +88,7 @@ function PreJoin({ roomId }: { roomId: string }) {
   const [code, setCode] = useState(initialCode)
   const [preview, setPreview] = useState<PreviewState>({ state: 'loading' })
   const [error, setError] = useState<string | null>(null)
+  const [hideIp, setHideIp] = useState(false)
   const joining = status === 'joining'
 
   useEffect(() => {
@@ -111,7 +112,7 @@ function PreJoin({ roomId }: { roomId: string }) {
 
   async function onJoin(withMic: boolean) {
     setError(null)
-    const res = await join(roomId, { joinCode: code || undefined, withMic })
+    const res = await join(roomId, { joinCode: code || undefined, withMic, hideIp })
     if (!res.ok && res.code !== 'CANCELLED') setError(res.message)
   }
 
@@ -132,7 +133,8 @@ function PreJoin({ roomId }: { roomId: string }) {
 
   const room = preview.data
   const isPrivate = room.requiresJoinCode
-  const full = room.participantCount >= room.maxMembers
+  // private rooms don't say how many are inside; the server refuses us if it is full
+  const full = !isPrivate && room.participantCount >= room.maxMembers
   const codeLength = config?.joinCodeLength ?? 6
   const needsCode = isPrivate && code.length !== codeLength && !initialCode
 
@@ -159,7 +161,8 @@ function PreJoin({ roomId }: { roomId: string }) {
         )}
 
         <p className="muted-left">
-          Room <strong>{room.id}</strong> · {room.participantCount}/{room.maxMembers} people
+          Room <strong>{room.id}</strong> ·{' '}
+          {isPrivate ? `up to ${room.maxMembers} people` : `${room.participantCount}/${room.maxMembers} people`}
         </p>
 
         {isPrivate && (
@@ -177,6 +180,28 @@ function PreJoin({ roomId }: { roomId: string }) {
         {error && (
           <p className="notice notice-error" role="alert">
             {error}
+          </p>
+        )}
+
+        {config?.forceRelay ? (
+          <p className="hint">This server routes all connections through a relay, so other participants never see your IP address.</p>
+        ) : (
+          <label className="hint">
+            <input
+              type="checkbox"
+              checked={hideIp}
+              disabled={!config?.relayAvailable}
+              onChange={(e) => setHideIp(e.target.checked)}
+            />{' '}
+            Hide my IP address{' '}
+            {config?.relayAvailable
+              ? '(connect through a relay; slightly more delay)'
+              : '(unavailable: this server has no relay)'}
+          </label>
+        )}
+        {!config?.forceRelay && !hideIp && (
+          <p className="hint">
+            Voice and chat connect directly between browsers, so the other participants can see your IP address.
           </p>
         )}
 

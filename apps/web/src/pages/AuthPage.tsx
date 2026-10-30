@@ -1,6 +1,7 @@
 import { useEffect, useState, type SyntheticEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
+import { api } from '../lib/api'
 import { useAuthStore } from '../store/auth.store'
 
 export default function AuthPage() {
@@ -14,6 +15,13 @@ export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [form, setForm] = useState({ name: '', username: '', email: '', password: '' })
   const isSignup = mode === 'signup'
+  // The server says whether Google sign-in is configured; don't offer a button that can't work.
+  const [googleEnabled, setGoogleEnabled] = useState(false)
+  useEffect(() => {
+    api<{ google: boolean }>('/auth/providers')
+      .then((p) => setGoogleEnabled(p.google))
+      .catch(() => setGoogleEnabled(false))
+  }, [])
 
   // Google errors come back as /auth?error=...
   useEffect(() => {
@@ -52,11 +60,14 @@ export default function AuthPage() {
       <div className="card">
         <h1>{isSignup ? 'Create your account' : 'Log in'}</h1>
 
-        <button type="button" className="btn btn-outline" onClick={onGoogle}>
-          Continue with Google
-        </button>
-
-        <div className="divider">or</div>
+        {googleEnabled && (
+          <>
+            <button type="button" className="btn btn-outline" onClick={onGoogle}>
+              Continue with Google
+            </button>
+            <div className="divider">or</div>
+          </>
+        )}
 
         <form onSubmit={onSubmit} className="form">
           {isSignup && (

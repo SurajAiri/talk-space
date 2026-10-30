@@ -17,6 +17,15 @@ export function errorHandler(
     return res.sendResponse(err.statusCode, null, err.message);
   }
 
+  // Client mistakes raised by Express itself (body too large, malformed JSON...)
+  // are the client's fault: say so, instead of logging a stack trace and answering 500.
+  const status = (err as { status?: unknown } | null)?.status;
+  if (typeof status === "number" && status >= 400 && status < 500) {
+    const message =
+      status === 413 ? "Request body is too large" : status === 400 ? "Malformed request" : "Bad request";
+    return res.sendResponse(status, null, message);
+  }
+
   console.error(err);
   const message =
     env.NODE_ENV === "production"

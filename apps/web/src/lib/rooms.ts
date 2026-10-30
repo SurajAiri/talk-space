@@ -15,6 +15,10 @@ export interface RoomConfig {
   shortDescriptionMax: number
   tags: { max: number; minLength: number; maxLength: number }
   chatMessageMax: number
+  /** a TURN server exists, so "hide my IP address" can work */
+  relayAvailable: boolean
+  /** the server insists on relay-only connections for everyone */
+  forceRelay: boolean
   purposes: Option[]
   languages: Option[]
 }
@@ -42,7 +46,7 @@ export type RoomPreview =
       id: string
       visibility: 'private'
       requiresJoinCode: true
-      participantCount: number
+      /** private rooms do not say who or how many are inside until you have the code */
       maxMembers: number
     }
 
@@ -98,4 +102,23 @@ export function loadRoomConfig(): Promise<RoomConfig> {
 
 export function labelFor(options: Option[] | undefined, value: string): string {
   return options?.find((o) => o.value === value)?.label ?? value
+}
+
+export const REPORT_REASONS: Option[] = [
+  { value: 'harassment', label: 'Harassment or bullying' },
+  { value: 'hate', label: 'Hate speech' },
+  { value: 'sexual_content', label: 'Sexual content' },
+  { value: 'threats', label: 'Threats' },
+  { value: 'spam', label: 'Spam' },
+  { value: 'other', label: 'Something else' },
+]
+
+export const reportsApi = {
+  create: (input: {
+    reportedId: string
+    roomId: string
+    reason: string
+    details?: string
+    messageExcerpt?: string
+  }) => api<{ id: string }>('/reports', { method: 'POST', body: input, token: token() }),
 }
