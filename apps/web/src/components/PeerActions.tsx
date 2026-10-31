@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { REPORT_REASONS } from '../lib/rooms'
 import { useAuthStore } from '../store/auth.store'
 import { useRoomStore } from '../store/room.store'
+import { BanIcon, FlagIcon, XIcon } from './Icons'
 
 /** Block / report / (host) remove, for one other person in the room. */
 export default function PeerActions({ peerId, name }: { peerId: string; name: string }) {
@@ -20,6 +21,11 @@ export default function PeerActions({ peerId, name }: { peerId: string; name: st
   const [busy, setBusy] = useState(false)
 
   const iAmHost = Boolean(selfId && hostId === selfId)
+  const reportRef = useRef<HTMLDivElement>(null)
+  // the form opens inside a scrolling list: make sure all of it is in view
+  useEffect(() => {
+    if (reporting) reportRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [reporting])
 
   async function onReport() {
     setBusy(true)
@@ -41,24 +47,42 @@ export default function PeerActions({ peerId, name }: { peerId: string; name: st
   }
 
   return (
-    <div className="peer-actions">
-      <button
-        type="button"
-        className="btn btn-outline btn-small"
-        onClick={() => (isBlocked ? unblockPeer(peerId) : blockPeer(peerId))}
-      >
-        {isBlocked ? 'Unblock' : 'Block'}
-      </button>
-      <button type="button" className="btn btn-outline btn-small" onClick={() => setReporting((v) => !v)}>
-        Report
-      </button>
-      {iAmHost && (
-        <button type="button" className="btn btn-danger btn-small" onClick={() => void onKick()}>
-          Remove
+    <>
+      <div className="peer-actions">
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon btn-small"
+          aria-pressed={isBlocked}
+          aria-label={isBlocked ? `Unblock ${name}` : `Block ${name}`}
+          title={isBlocked ? 'Unblock' : 'Block: stop hearing them'}
+          onClick={() => (isBlocked ? unblockPeer(peerId) : blockPeer(peerId))}
+        >
+          <BanIcon size={16} />
         </button>
-      )}
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon btn-small"
+          aria-pressed={reporting}
+          aria-label={`Report ${name}`}
+          title="Report"
+          onClick={() => setReporting((v) => !v)}
+        >
+          <FlagIcon size={16} />
+        </button>
+        {iAmHost && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon btn-small btn-quiet-danger"
+            aria-label={`Remove ${name} from the room`}
+            title="Remove from room"
+            onClick={() => void onKick()}
+          >
+            <XIcon size={16} />
+          </button>
+        )}
+      </div>
       {reporting && (
-        <div className="peer-report">
+        <div className="peer-report" ref={reportRef}>
           <select aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)}>
             {REPORT_REASONS.map((r) => (
               <option key={r.value} value={r.value}>
@@ -74,11 +98,16 @@ export default function PeerActions({ peerId, name }: { peerId: string; name: st
             onChange={(e) => setDetails(e.target.value)}
           />
           <p className="hint">Their latest message here is attached so a moderator has context.</p>
-          <button type="button" className="btn btn-small" disabled={busy} onClick={() => void onReport()}>
-            {busy ? 'Sending…' : 'Send report'}
-          </button>
+          <div className="peer-report-actions">
+            <button type="button" className="btn btn-ghost btn-small" onClick={() => setReporting(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-small" disabled={busy} onClick={() => void onReport()}>
+              {busy ? 'Sending…' : 'Send report'}
+            </button>
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

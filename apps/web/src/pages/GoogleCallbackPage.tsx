@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
+import { LogoMark } from '../components/Logo'
 import { useAuthStore } from '../store/auth.store'
 
 /** The API redirects here with our JWT in the URL fragment: /auth/callback#token=... */
@@ -20,5 +21,12 @@ export default function GoogleCallbackPage() {
     void setToken(token).then(() => navigate('/home', { replace: true }))
   }, [navigate, setToken])
 
-  return <div className="center-screen">Signing you in…</div>
+  return (
+    <div className="center-screen" role="status">
+      <div className="splash">
+        <LogoMark size={44} />
+        <p>Signing you in…</p>
+      </div>
+    </div>
+  )
 }

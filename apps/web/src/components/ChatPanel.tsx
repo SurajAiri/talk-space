@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useRoomStore } from '../store/room.store'
+import { SendIcon, UsersIcon } from './Icons'
 
 const time = (ts: number) =>
   new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -30,11 +31,14 @@ export default function ChatPanel({ maxLength }: { maxLength: number }) {
     <div className="chat">
       <div className="chat-log" ref={logRef} role="log" aria-live="polite">
         {messages.length === 0 && (
-          <p className="muted-left">
-            {peerCount === 0
-              ? 'Waiting for others to join. Messages go straight to them, and nothing is stored.'
-              : 'No messages yet. Messages go straight to the others in this room.'}
-          </p>
+          <div className="chat-empty">
+            <UsersIcon size={28} />
+            <p>
+              {peerCount === 0
+                ? 'Waiting for others to join. Messages go straight to them, and nothing is stored.'
+                : 'No messages yet. Messages go straight to the others in this room.'}
+            </p>
+          </div>
         )}
         {messages.map((m) => (
           <div key={m.id} className={m.self ? 'msg msg-self' : 'msg'}>
@@ -59,8 +63,8 @@ export default function ChatPanel({ maxLength }: { maxLength: number }) {
           autoComplete="off"
           onChange={(e) => setText(e.target.value)}
         />
-        <button type="submit" className="btn" disabled={!text.trim()}>
-          Send
+        <button type="submit" className="btn" disabled={!text.trim()} aria-label="Send message">
+          <SendIcon size={17} />
         </button>
       </form>
     </div>

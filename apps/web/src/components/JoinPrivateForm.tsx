@@ -17,26 +17,30 @@ export default function JoinPrivateForm({ config }: { config: RoomConfig | null 
 
   return (
     <form className="form" onSubmit={onSubmit}>
-      <input
-        aria-label="Room ID"
-        placeholder={`Room ID (${idLength} letters)`}
-        value={roomId}
-        maxLength={idLength}
-        autoCapitalize="characters"
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(e) => setRoomId(e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase())}
-      />
-      <input
-        aria-label="Join code"
-        placeholder={`Join code (${codeLength} digits)`}
-        value={code}
-        maxLength={codeLength}
-        inputMode="numeric"
-        autoComplete="off"
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-      />
-      <button type="submit" className="btn" disabled={!ready}>
+      <label className="field">
+        Room ID
+        <input
+          placeholder={`${idLength} letters`}
+          value={roomId}
+          maxLength={idLength}
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setRoomId(e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase())}
+        />
+      </label>
+      <label className="field">
+        Join code
+        <input
+          placeholder={`${codeLength} digits`}
+          value={code}
+          maxLength={codeLength}
+          inputMode="numeric"
+          autoComplete="off"
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+        />
+      </label>
+      <button type="submit" className="btn btn-block" disabled={!ready}>
         Join private room
       </button>
     </form>

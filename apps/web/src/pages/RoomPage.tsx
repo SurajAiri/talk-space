@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import AppHeader from '../components/AppHeader'
 import ChatPanel from '../components/ChatPanel'
 import CopyButton from '../components/CopyButton'
+import { GlobeIcon, HeadphonesIcon, LockIcon, MapIcon, MicIcon, MicOffIcon, PhoneOffIcon, ShieldIcon, UsersIcon } from '../components/Icons'
+import MapThumb from '../components/MapThumb'
 import ParticipantList from '../components/ParticipantList'
 import WorldView from '../components/WorldView'
 import { useRoomConfig } from '../hooks/useRoomConfig'
@@ -59,10 +61,13 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function Message({ title, body }: { title: string; body: string }) {
   return (
-    <div className="card">
+    <div className="card message">
+      <span className="message-icon">
+        <UsersIcon size={24} />
+      </span>
       <h1>{title}</h1>
-      <p className="muted-left">{body}</p>
-      <Link to="/home" className="btn btn-outline center">
+      <p>{body}</p>
+      <Link to="/home" className="btn btn-outline">
         Back to rooms
       </Link>
     </div>
@@ -126,7 +131,9 @@ function PreJoin({ roomId }: { roomId: string }) {
   if (preview.state === 'loading') {
     return (
       <Shell>
-        <div className="card">Loading room…</div>
+        <div className="card message" role="status">
+          <h1>Loading room…</h1>
+        </div>
       </Shell>
     )
   }
@@ -140,93 +147,102 @@ function PreJoin({ roomId }: { roomId: string }) {
 
   return (
     <Shell>
-      <div className="card card-wide">
-        <div>
-          <h1>{isPrivate ? 'Private room' : room.title}</h1>
-          {!isPrivate && room.shortDescription && (
-            <p className="muted-left">{room.shortDescription}</p>
-          )}
+      <div className="card prejoin">
+        <div className={isPrivate ? 'prejoin-banner is-private' : 'prejoin-banner'}>
+          {isPrivate ? <LockIcon size={34} /> : <MapThumb mapKey={room.map} />}
         </div>
-
-        {!isPrivate && (
-          <div className="chips">
-            <span className="chip">{labelFor(config?.languages, room.language)}</span>
-            <span className="chip">{labelFor(config?.purposes, room.purpose)}</span>
-            {room.tags.map((t) => (
-              <span key={t} className="chip chip-tag">
-                #{t}
-              </span>
-            ))}
+        <div className="prejoin-body">
+          <div className="stack" style={{ gap: 6 }}>
+            <h1>{isPrivate ? 'Private room' : room.title}</h1>
+            {!isPrivate && room.shortDescription && <p className="muted-left">{room.shortDescription}</p>}
           </div>
-        )}
 
-        <p className="muted-left">
-          Room <strong>{room.id}</strong> ·{' '}
-          {isPrivate ? `up to ${room.maxMembers} people` : `${room.participantCount}/${room.maxMembers} people`}
-        </p>
+          {!isPrivate && (
+            <div className="chips">
+              <span className="chip">
+                <GlobeIcon size={13} />
+                {labelFor(config?.languages, room.language)}
+              </span>
+              <span className="chip chip-neutral">{labelFor(config?.purposes, room.purpose)}</span>
+              {room.tags.map((t) => (
+                <span key={t} className="chip chip-tag">
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
 
-        {isPrivate && (
-          <input
-            aria-label="Join code"
-            placeholder={`Join code (${codeLength} digits)`}
-            value={code}
-            maxLength={codeLength}
-            inputMode="numeric"
-            autoComplete="off"
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-          />
-        )}
-
-        {error && (
-          <p className="notice notice-error" role="alert">
-            {error}
+          <p className="facts">
+            <span>
+              Room <code>{room.id}</code>
+            </span>
+            <span>
+              <UsersIcon size={15} />
+              {isPrivate ? `Up to ${room.maxMembers} people` : `${room.participantCount} of ${room.maxMembers} here`}
+            </span>
           </p>
-        )}
 
-        {config?.forceRelay ? (
-          <p className="hint">This server routes all connections through a relay, so other participants never see your IP address.</p>
-        ) : (
-          <label className="hint">
-            <input
-              type="checkbox"
-              checked={hideIp}
-              disabled={!config?.relayAvailable}
-              onChange={(e) => setHideIp(e.target.checked)}
-            />{' '}
-            Hide my IP address{' '}
-            {config?.relayAvailable
-              ? '(connect through a relay; slightly more delay)'
-              : '(unavailable: this server has no relay)'}
-          </label>
-        )}
-        {!config?.forceRelay && !hideIp && (
-          <p className="hint">
-            Voice and chat connect directly between browsers, so the other participants can see your IP address.
-          </p>
-        )}
+          {isPrivate && (
+            <label className="field">
+              Join code
+              <input
+                placeholder={`${codeLength} digits`}
+                value={code}
+                maxLength={codeLength}
+                inputMode="numeric"
+                autoComplete="off"
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              />
+            </label>
+          )}
 
-        <div className="stack">
-          <button
-            type="button"
-            className="btn"
-            disabled={joining || full || needsCode}
-            onClick={() => onJoin(true)}
-          >
-            {joining ? 'Joining…' : full ? 'Room is full' : 'Join with microphone'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline"
-            disabled={joining || full || needsCode}
-            onClick={() => onJoin(false)}
-          >
-            Join listen-only
-          </button>
+          {error && (
+            <p className="notice notice-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          {config?.forceRelay ? (
+            <div className="option-row is-static">
+              <ShieldIcon size={18} />
+              <div>
+                <strong>Your IP address is hidden</strong>
+                <span>This server routes all connections through a relay, so other participants never see it.</span>
+              </div>
+            </div>
+          ) : (
+            <label className="option-row">
+              <input
+                type="checkbox"
+                checked={hideIp}
+                disabled={!config?.relayAvailable}
+                onChange={(e) => setHideIp(e.target.checked)}
+              />
+              <div>
+                <strong>Hide my IP address</strong>
+                <span>
+                  {config?.relayAvailable
+                    ? hideIp
+                      ? 'You connect through a relay: a little more delay, and nobody sees your IP.'
+                      : 'Connect through a relay for a little more delay. Otherwise other participants can see your IP, because voice and chat go directly between browsers.'
+                    : 'Unavailable: this server has no relay. Other participants can see your IP, because voice and chat go directly between browsers.'}
+                </span>
+              </div>
+            </label>
+          )}
+
+          <div className="stack">
+            <button type="button" className="btn btn-lg" disabled={joining || full || needsCode} onClick={() => onJoin(true)}>
+              <MicIcon size={18} />
+              {joining ? 'Joining…' : full ? 'Room is full' : 'Join with microphone'}
+            </button>
+            <button type="button" className="btn btn-outline btn-lg" disabled={joining || full || needsCode} onClick={() => onJoin(false)}>
+              <HeadphonesIcon size={18} />
+              Join listen-only
+            </button>
+          </div>
+          <p className="hint center">The server only helps you find each other.</p>
         </div>
-        <p className="hint">
-          Voice and chat go directly between participants' browsers. The server only helps you find
-          each other.
-        </p>
       </div>
     </Shell>
   )
@@ -260,30 +276,32 @@ function InRoom() {
           <div>
             <h1>{room.title}</h1>
             <div className="chips">
-              <span className="chip">{labelFor(config?.languages, room.language)}</span>
-              <span className="chip">{labelFor(config?.purposes, room.purpose)}</span>
-              {world && <span className="chip">🗺 {world.map.title}</span>}
+              <span className="chip">
+                <GlobeIcon size={13} />
+                {labelFor(config?.languages, room.language)}
+              </span>
+              <span className="chip chip-neutral">{labelFor(config?.purposes, room.purpose)}</span>
+              {world && (
+                <span className="chip chip-neutral">
+                  <MapIcon size={13} />
+                  {world.map.title}
+                </span>
+              )}
               {room.tags.map((t) => (
                 <span key={t} className="chip chip-tag">
                   #{t}
                 </span>
               ))}
-              <span className="chip">
-                {peerCount + 1}/{room.maxMembers} people
-              </span>
             </div>
           </div>
           <div className="room-head-actions">
             <CopyButton value={room.id} label="Room ID" />
             {room.joinCode && <CopyButton value={room.joinCode} label="Join code" />}
-            <button type="button" className="btn btn-danger" onClick={onLeave}>
-              Leave room
-            </button>
           </div>
         </header>
 
         {status === 'reconnecting' && (
-          <p className="notice" role="status">
+          <p className="notice notice-warn" role="status">
             Connection to the server was lost. Reconnecting…
           </p>
         )}
@@ -295,33 +313,47 @@ function InRoom() {
             </section>
           )}
           <section className="panel panel-people" aria-label="People">
-            <h2>People</h2>
+            <div className="panel-head">
+              <h2>People</h2>
+              <span className="count-pill">
+                {peerCount + 1} of {room.maxMembers}
+              </span>
+            </div>
             <ParticipantList />
           </section>
           <section className="panel panel-chat" aria-label="Chat">
-            <h2>Chat</h2>
+            <div className="panel-head">
+              <h2>Chat</h2>
+            </div>
             <ChatPanel maxLength={config?.chatMessageMax ?? 2000} />
           </section>
         </div>
 
-        <footer className="controls">
+        <footer className="dock">
           {mic === 'on' ? (
             <button
               type="button"
-              className={muted ? 'btn btn-outline' : 'btn'}
+              className={muted ? 'btn btn-outline dock-btn is-muted' : 'btn btn-outline dock-btn is-live'}
               onClick={toggleMute}
               aria-pressed={!muted}
             >
+              {muted ? <MicOffIcon size={19} /> : <MicIcon size={19} />}
               {muted ? 'Unmute microphone' : 'Mute microphone'}
             </button>
           ) : (
-            <button type="button" className="btn" onClick={() => void enableMic()}>
+            <button type="button" className="btn dock-btn" onClick={() => void enableMic()}>
+              <MicIcon size={19} />
               Turn on microphone
             </button>
           )}
-          <span className="hint">
+          <span className="dock-status" role="status">
             {MIC_HINT[mic] ?? (muted ? 'You’re muted.' : 'Others can hear you.')}
           </span>
+          <span className="dock-sep" aria-hidden="true" />
+          <button type="button" className="btn btn-danger dock-btn" onClick={onLeave}>
+            <PhoneOffIcon size={19} />
+            Leave
+          </button>
         </footer>
       </main>
     </div>

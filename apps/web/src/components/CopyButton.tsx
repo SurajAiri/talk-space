@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CheckIcon, CopyIcon } from './Icons'
 
 export default function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false)
@@ -14,11 +15,12 @@ export default function CopyButton({ value, label }: { value: string; label: str
   }
 
   return (
-    <button type="button" className="copy" onClick={copy} title={`Copy ${label}`}>
+    <button type="button" className={copied ? 'copy is-copied' : 'copy'} onClick={copy} title={`Copy ${label}`}>
       <span className="copy-label">{label}</span>
       <code>{value}</code>
       <span className="copy-state" aria-live="polite">
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+        <span className="sr-only">{copied ? 'Copied' : 'Copy'}</span>
       </span>
     </button>
   )
