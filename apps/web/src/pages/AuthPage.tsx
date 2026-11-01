@@ -24,7 +24,7 @@ export default function AuthPage() {
   const register = useAuthStore((s) => s.register)
   const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle)
 
-  const [mode, setMode] = useState<'login' | 'signup'>(() => (params.get('mode') === 'signup' ? 'signup' : 'login'))
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [form, setForm] = useState({ name: '', username: '', email: '', password: '' })
   const [attempted, setAttempted] = useState(false) // after the first submit, every problem is shown at once
   const [formError, setFormError] = useState<string | null>(null)

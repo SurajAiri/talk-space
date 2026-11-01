@@ -43,6 +43,16 @@ router.post(
   rateLimit({ name: "refresh:user", limit: 120, windowSeconds: 3600, by: (req) => req.auth?.id }),
   controllers.refresh,
 );
+// Someone holding a stolen token must not be able to guess the current password at leisure.
+router.post(
+  "/change-password",
+  requireAuth,
+  rateLimit(
+    { name: "pwchange:user", limit: 5, windowSeconds: 600, by: (req) => req.auth?.id },
+    { name: "pwchange:ip", limit: 30, windowSeconds: 600, by: clientIp },
+  ),
+  controllers.changePassword,
+);
 router.post("/logout-everywhere", requireAuth, controllers.logoutEverywhere);
 
 export default router;

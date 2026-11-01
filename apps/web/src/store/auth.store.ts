@@ -20,6 +20,10 @@ interface AuthState {
     password: string
   }) => Promise<void>
   signInWithGoogle: () => Promise<void>
+  /** Replaces the signed-in user, e.g. with the fresh copy the API returns after a profile change. */
+  setUser: (user: User) => void
+  /** Changes the password. The API signs out every other device and hands this one a fresh token. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   /** Swaps the current token for a fresh one. Tokens are short-lived, so this runs quietly in the background. */
   refresh: () => Promise<void>
   logout: () => void
@@ -94,6 +98,18 @@ export const useAuthStore = create<AuthState>()(
           errorCallbackURL: '/auth',
         })
         if (error) throw new Error(error.message ?? 'Failed to continue with Google')
+      },
+
+      setUser: (user) => set({ user }),
+
+      changePassword: async (currentPassword, newPassword) => {
+        const { token } = get()
+        const res = await api<{ token: string }>('/auth/change-password', {
+          method: 'POST',
+          body: { currentPassword, newPassword },
+          token,
+        })
+        set({ token: res.token })
       },
 
       refresh: async () => {

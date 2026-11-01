@@ -1,9 +1,12 @@
+export type Gender = 'female' | 'male' | 'non_binary' | 'prefer_not_to_say'
+
 export interface User {
   id: string
   name: string
   username: string
   email: string
   bio: string | null
+  gender: Gender | null
   spokenLanguages: string[]
   interests: string[]
   skills: string[]
@@ -11,6 +14,10 @@ export interface User {
   strikes: number
   status: 'active' | 'suspended' | 'banned'
   userType: 'user' | 'admin'
+  /** null until the onboarding questions are answered */
+  onboardedAt: string | null
+  /** false for accounts that sign in with Google only */
+  hasPassword: boolean
   createdAt: string
 }
 

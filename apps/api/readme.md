@@ -53,6 +53,20 @@ Imports use `.js` extensions (NodeNext ESM) even though the files are `.ts`.
 3. Create `src/features/<name>/{routes,controllers,services}.ts`
 4. Mount the router in `src/routes/index.routes.ts`
 
+## Profile and onboarding
+
+New accounts (and old accounts that never filled in a profile) have `onboarded_at = null`; the web app
+sends them to `/onboarding` until it is set. Lists, limits and suggestions live in
+`src/config/profile.config.ts` and are served to the web app, so changing them needs no web edit.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /users/options` | Genders, languages, interest/skill suggestions and limits |
+| `GET /users/me` | Your profile, including `gender`, `onboardedAt` and `hasPassword` (false for Google accounts) |
+| `POST /users/me/onboarding` | Saves the onboarding answers and sets `onboardedAt`. Gender, 1+ language, 1+ interest and 1+ skill are required; the bio is optional. Safe to repeat |
+| `PATCH /users/me` | Edits only the fields sent (name, username, gender, bio, languages, interests, skills). Lists and the bio may be emptied |
+| `POST /auth/change-password` | Needs the current password. Signs out every other session and returns a fresh token for this one. Rate limited. Not available to Google-only accounts |
+
 ## Google login
 
 `lib/better-auth.ts` runs better-auth stateless (no database) just for the Google OAuth

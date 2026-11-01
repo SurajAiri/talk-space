@@ -265,3 +265,60 @@ export const KeyIcon = (p: P) => (
     <path d="m10.7 12.3 9.3-9.3M16 7l3 3M14 9l2 2" />
   </Icon>
 )
+export const PencilIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </Icon>
+)
+export const ArrowRightIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </Icon>
+)
+export const SparklesIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z" />
+    <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" />
+  </Icon>
+)
+export const HeartIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6Z" />
+  </Icon>
+)
+export const ZapIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M13 2 4 14h7l-1 8 9-12h-7Z" />
+  </Icon>
+)
+export const CalendarIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+  </Icon>
+)
+export const StarIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z" />
+  </Icon>
+)
+/** Gender symbols: a ring with a cross (female), a ring with an arrow (male), a ring with a stem and ticks (non-binary). */
+export const VenusIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="9" r="5" />
+    <path d="M12 14v7M9 18h6" />
+  </Icon>
+)
+export const MarsIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="10" cy="14" r="5.5" />
+    <path d="M14 10l6.5-6.5M15 3.5h5.5V9" />
+  </Icon>
+)
+export const NonBinaryIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="15" r="4.5" />
+    <path d="M12 10.5V3M8.8 5.2 12 7.4l3.2-2.2" />
+  </Icon>
+)

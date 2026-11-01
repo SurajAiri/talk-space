@@ -87,3 +87,34 @@ export function validateTag(tag: string, min: number, max: number): string | nul
   if (tag.length > max) return `Tags are ${max} characters at most`
   return null
 }
+
+// ---- profile ----
+
+/** Mirrors the server's rule for one interest or skill (apps/api/src/features/user/schemas.ts). */
+const LABEL_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} .+#&'’/-]*$/u
+
+/** `  rock   climbing ` -> `rock climbing`: what gets stored. */
+export function normalizeLabel(v: string): string {
+  return v.trim().replace(/\s+/g, ' ')
+}
+
+export function validateLabel(label: string, min: number, max: number): string | null {
+  if (label.length < min) return `At least ${min} characters`
+  if (label.length > max) return `${max} characters at most`
+  if (!LABEL_RE.test(label)) return 'Letters, numbers and simple punctuation only'
+  return null
+}
+
+/** True when two lists hold the same items in the same order. */
+export function sameList(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
+export function validateBio(v: string, max: number): string | null {
+  return v.trim().length > max ? `Keep it to ${max} characters` : null
+}
+
+export function validateConfirmation(password: string, confirmation: string): string | null {
+  if (!confirmation) return 'Type the new password again'
+  return password === confirmation ? null : 'The two passwords don’t match'
+}

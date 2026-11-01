@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { users } from "../../db/schema/index.js";
 import { signJWT } from "../../services/jwt.service.js";
@@ -103,6 +103,39 @@ export async function refresh(userId: string) {
 /** "Log out everywhere": every token issued so far stops working. */
 export async function logoutEverywhere(userId: string) {
   await revokeTokens(userId);
+}
+
+/**
+ * Changes the password of a signed-in account. Every other session is signed out (the token
+ * version moves on) and the caller gets a fresh token so this device stays signed in.
+ */
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const [user] = await db
+    .select({ passwordHash: users.passwordHash })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) throw new AppError(401, "Your session has expired. Please log in again.");
+  if (!user.passwordHash) {
+    throw new AppError(400, "This account signs in with Google, so it has no password to change.");
+  }
+
+  if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    throw new AppError(400, "Your current password is incorrect");
+  }
+  if (currentPassword === newPassword) {
+    throw new AppError(400, "Choose a new password that is different from the current one");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+  const [updated] = await db
+    .update(users)
+    .set({ passwordHash, tokenVersion: sql`${users.tokenVersion} + 1` })
+    // only if nobody changed it while we were hashing
+    .where(and(eq(users.id, userId), eq(users.passwordHash, user.passwordHash)))
+    .returning(publicFields);
+  if (!updated) throw new AppError(409, "Your password was just changed somewhere else. Try again.");
+  return withToken(updated);
 }
 
 // Username for Google users: derived from the email, made unique.

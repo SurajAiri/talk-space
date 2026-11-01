@@ -3,7 +3,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import { env } from "../../config/env.js";
 import { googleAuth } from "../../lib/better-auth.js";
 import { AppError } from "../../utils/errors.js";
-import { loginSchema, registerSchema } from "./schemas.js";
+import { changePasswordSchema, loginSchema, registerSchema } from "./schemas.js";
 import * as authService from "./services.js";
 
 function parse<T>(schema: { safeParse: (d: unknown) => any }, body: unknown): T {
@@ -40,6 +40,15 @@ export async function login(req: Request, res: Response) {
 export async function refresh(req: Request, res: Response) {
   const result = await authService.refresh(req.auth!.id);
   res.sendResponse(200, result, "Refreshed");
+}
+
+export async function changePassword(req: Request, res: Response) {
+  const { currentPassword, newPassword } = parse<ReturnType<typeof changePasswordSchema.parse>>(
+    changePasswordSchema,
+    req.body,
+  );
+  const result = await authService.changePassword(req.auth!.id, currentPassword, newPassword);
+  res.sendResponse(200, { token: result.token }, "Password changed");
 }
 
 export async function logoutEverywhere(req: Request, res: Response) {

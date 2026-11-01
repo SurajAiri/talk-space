@@ -15,6 +15,13 @@ export const userStatusEnum = pgEnum("user_status", [
   "suspended",
   "banned",
 ]);
+export const genderEnum = pgEnum("gender", [
+  "female",
+  "male",
+  "non_binary",
+  "prefer_not_to_say",
+]);
+export type Gender = (typeof genderEnum.enumValues)[number];
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -24,6 +31,8 @@ export const users = pgTable("users", {
   // null for users who signed up with Google
   passwordHash: text("password_hash"),
   bio: text("bio"), // <= 200 chars
+  // null until the person answers during onboarding
+  gender: genderEnum("gender"),
   spokenLanguages: text("spoken_languages").array().notNull().default([]),
   interests: text("interests").array().notNull().default([]),
   skills: text("skills").array().notNull().default([]), // "good with"
@@ -31,6 +40,9 @@ export const users = pgTable("users", {
   strikes: integer("strikes").notNull().default(0),
   status: userStatusEnum("status").notNull().default("active"),
   userType: userTypeEnum("user_type").notNull().default("user"),
+  // Set when the person finishes the onboarding questions. null = the web app sends them there
+  // after login, so new accounts (and old ones that never filled in a profile) are asked once.
+  onboardedAt: timestamp("onboarded_at"),
   // true once the address is proven to belong to this person (Google says so).
   // Password sign-ups start unverified: nobody has checked the address yet.
   emailVerified: boolean("email_verified").notNull().default(false),
