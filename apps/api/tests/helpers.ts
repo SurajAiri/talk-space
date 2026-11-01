@@ -78,7 +78,7 @@ export async function makeUser(): Promise<TestUser> {
   const email = `${u}@example.test`;
   const username = `u_${u}`.slice(0, 20);
   const r = await http("/auth/register", {
-    body: { name: `User ${u}`, username, email, password },
+    body: { name: `User ${u}`, username, email, password, acceptPrivacyPolicy: true },
     ip: `10.0.${ipCounter >> 8}.${ipCounter++ & 255}`,
   });
   if (r.status !== 201) throw new Error(`register failed: ${r.status} ${JSON.stringify(r.json)}`);

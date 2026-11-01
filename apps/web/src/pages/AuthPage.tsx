@@ -2,7 +2,7 @@ import { useEffect, useState, type SyntheticEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import EarshotDiagram from "../components/EarshotDiagram";
-import { PasswordField, TextField } from "../components/form/fields";
+import { CheckboxField, PasswordField, TextField } from "../components/form/fields";
 import {
   AlertIcon,
   AtSignIcon,
@@ -13,12 +13,14 @@ import {
 } from "../components/Icons";
 import Logo from "../components/Logo";
 import { api } from "../lib/api";
+import { PRIVACY_POLICY_PATH } from "../lib/legal";
 import {
   normalizeUsername,
   validateEmail,
   validateExistingPassword,
   validateName,
   validateNewPassword,
+  validatePrivacyConsent,
   validateUsername,
 } from "../lib/validation";
 import { useAuthStore } from "../store/auth.store";
@@ -40,6 +42,8 @@ export default function AuthPage() {
     email: "",
     password: "",
   });
+  // Creating an account means accepting the Privacy Policy. The server insists too; this is the box.
+  const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [attempted, setAttempted] = useState(false); // after the first submit, every problem is shown at once
   const [formError, setFormError] = useState<string | null>(null);
   const isSignup = mode === "signup";
@@ -74,6 +78,7 @@ export default function AuthPage() {
     password: isSignup
       ? validateNewPassword(form.password)
       : validateExistingPassword(form.password),
+    policy: isSignup ? validatePrivacyConsent(acceptedPolicy) : null,
   };
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -104,6 +109,7 @@ export default function AuthPage() {
           ...form,
           name: form.name.trim(),
           email: form.email.trim(),
+          acceptPrivacyPolicy: acceptedPolicy,
         });
       else await login(form.email.trim(), form.password);
       toast.success(isSignup ? "Account created" : "Welcome back");
@@ -254,6 +260,23 @@ export default function AuthPage() {
               autoComplete={isSignup ? "new-password" : "current-password"}
               enterKeyHint="go"
             />
+            {isSignup && (
+              <CheckboxField
+                checked={acceptedPolicy}
+                onChange={(v) => {
+                  setAcceptedPolicy(v);
+                  clearErrors();
+                }}
+                error={errors.policy}
+                showError={attempted}
+              >
+                I have read and accept the{" "}
+                <a href={PRIVACY_POLICY_PATH} target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>
+                .
+              </CheckboxField>
+            )}
             <button
               type="submit"
               className="btn btn-lg btn-block"

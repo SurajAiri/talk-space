@@ -310,6 +310,55 @@ export function Switch({
   )
 }
 
+/* ---------------------------------------------------------------- checkbox */
+
+/**
+ * A tick box with a sentence beside it, for agreeing to something (the sentence may hold links).
+ * The error appears once the form was submitted without it, like every other field.
+ */
+export function CheckboxField({
+  checked,
+  onChange,
+  children,
+  error,
+  showError,
+  disabled,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  children: ReactNode
+  error?: string | null
+  showError?: boolean
+  disabled?: boolean
+}) {
+  const id = useId()
+  const shown = showError && error ? error : null
+  return (
+    <div className={`ff ${shown ? 'has-error' : ''}`}>
+      <label className={`check ${disabled ? 'is-disabled' : ''}`} htmlFor={id}>
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          aria-invalid={shown ? true : undefined}
+          aria-describedby={shown ? `${id}-msg` : undefined}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="check-text">{children}</span>
+      </label>
+      {shown && (
+        <div className="ff-foot">
+          <span id={`${id}-msg`} className="ff-msg is-error" role="alert">
+            <AlertIcon size={14} />
+            {shown}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------- code input */
 
 /**

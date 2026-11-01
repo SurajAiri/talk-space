@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { Toaster } from "sonner";
 import {
+  ConsentRoute,
   NotOnboardedRoute,
   OnboardedRoute,
   ProtectedRoute,
@@ -11,8 +12,10 @@ import AuthPage from "./pages/AuthPage";
 import GoogleCallbackPage from "./pages/GoogleCallbackPage";
 import LobbyPage from "./pages/LobbyPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import ProfilePage from "./pages/ProfilePage";
 import RoomPage from "./pages/RoomPage";
+import { PRIVACY_POLICY_PATH } from "./lib/legal";
 import { useAuthStore } from "./store/auth.store";
 import LandingPage from "./pages/LandingPage";
 
@@ -66,18 +69,23 @@ export default function App() {
         />
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/auth/callback" element={<GoogleCallbackPage />} />
+        {/* public: it must be readable before signing up, and before accepting it */}
+        <Route path={PRIVACY_POLICY_PATH} element={<PrivacyPolicyPage />} />
         <Route element={<PublicOnlyRoute />}>
           <Route path="/auth" element={<AuthPage />} />
         </Route>
         <Route element={<ProtectedRoute />}>
-          <Route element={<NotOnboardedRoute />}>
-            <Route path="/onboarding" element={<OnboardingPage />} />
-          </Route>
-          {/* everything below needs the onboarding questions answered first */}
-          <Route element={<OnboardedRoute />}>
-            <Route path="/home" element={<LobbyPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/room/:roomId" element={<RoomPage />} />
+          {/* nothing in the app, onboarding included, until the Privacy Policy is accepted */}
+          <Route element={<ConsentRoute />}>
+            <Route element={<NotOnboardedRoute />}>
+              <Route path="/onboarding" element={<OnboardingPage />} />
+            </Route>
+            {/* everything below needs the onboarding questions answered first */}
+            <Route element={<OnboardedRoute />}>
+              <Route path="/home" element={<LobbyPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/room/:roomId" element={<RoomPage />} />
+            </Route>
           </Route>
         </Route>
         {MapEditorPage && (

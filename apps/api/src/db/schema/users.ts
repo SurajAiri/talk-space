@@ -48,6 +48,13 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   // Bumped to invalidate every token issued before (ban, password reset, "log out everywhere").
   tokenVersion: integer("token_version").notNull().default(0),
+  // When the person agreed to the Privacy Policy, and which version they agreed to
+  // (config/legal.config.ts). null = never accepted: Google sign-ups are asked on their first visit,
+  // and accounts that predate the policy are asked once on their next login.
+  // timestamptz, unlike the columns above: this is a record of a moment, so it must not depend on
+  // the time zone the database session happens to run in.
+  privacyPolicyAcceptedAt: timestamp("privacy_policy_accepted_at", { withTimezone: true }),
+  privacyPolicyVersion: text("privacy_policy_version"),
   createdAt: timestamp("created_at").notNull().defaultNow(), // joined date
   updatedAt: timestamp("updated_at")
     .notNull()

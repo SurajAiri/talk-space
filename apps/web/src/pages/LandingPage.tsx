@@ -382,6 +382,7 @@ export default function LandingPage() {
           <span className="lp-footlinks">
             <a href="#how">How it sounds</a>
             <a href="#safety">Safety</a>
+            <Link to="/privacy">Privacy</Link>
             <Link to="/auth">Log in</Link>
           </span>
         </div>

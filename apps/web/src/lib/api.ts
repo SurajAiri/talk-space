@@ -16,6 +16,11 @@ export interface User {
   userType: 'user' | 'admin'
   /** null until the onboarding questions are answered */
   onboardedAt: string | null
+  /** when the person accepted the Privacy Policy, and which version; null = never */
+  privacyPolicyAcceptedAt: string | null
+  privacyPolicyVersion: string | null
+  /** true until the CURRENT version is accepted (never accepted, or the policy has changed since) */
+  needsPrivacyConsent: boolean
   /** false for accounts that sign in with Google only */
   hasPassword: boolean
   createdAt: string

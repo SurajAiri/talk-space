@@ -6,6 +6,7 @@ import {
   passwordStrength,
   validateEmail,
   validateNewPassword,
+  validatePrivacyConsent,
   validateTag,
   validateUsername,
 } from '../src/lib/validation.ts'
@@ -79,4 +80,9 @@ test('someone who is off screen gets no bubble (the message tile covers them), s
   assert.equal(bubbleVisible({ minX: -900, maxX: -20 }), false, 'off the left edge')
   assert.equal(bubbleVisible({ minX: 40, maxX: 700 }), false, 'off the right edge')
   assert.equal(bubbleVisible({ minX: -900, maxX: 2 }), false, 'standing right on the edge: still just a fragment')
+})
+
+test('the Privacy Policy box must be ticked', () => {
+  assert.notEqual(validatePrivacyConsent(false), null)
+  assert.equal(validatePrivacyConsent(true), null)
 })

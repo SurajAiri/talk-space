@@ -43,6 +43,8 @@ export const profileApi = {
   options: () => api<ProfileOptions>('/users/options', { token: token() }),
   completeOnboarding: (input: OnboardingInput) =>
     api<User>('/users/me/onboarding', { method: 'POST', body: input, token: token() }),
+  acceptPrivacyPolicy: () =>
+    api<User>('/users/me/privacy-policy', { method: 'POST', body: { accepted: true }, token: token() }),
   update: (patch: ProfilePatch) => api<User>('/users/me', { method: 'PATCH', body: patch, token: token() }),
 }
 

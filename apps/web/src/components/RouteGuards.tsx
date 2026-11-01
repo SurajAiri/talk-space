@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { useAuthStore } from '../store/auth.store'
+import PrivacyConsentPage from '../pages/PrivacyConsentPage'
 import { LogoMark } from './Logo'
 
 function Splash() {
@@ -48,4 +49,14 @@ export function OnboardedRoute() {
 export function NotOnboardedRoute() {
   const user = useAuthStore((s) => s.user)
   return user?.onboardedAt ? <Navigate to="/home" replace /> : <Outlet />
+}
+
+/**
+ * Use inside ProtectedRoute, above the onboarding guards. Until the person has accepted the current
+ * Privacy Policy the app is replaced by the screen that asks for it, whatever address they opened.
+ * Once accepted the same URL carries on to wherever they were heading (a shared room link, say).
+ */
+export function ConsentRoute() {
+  const needsConsent = useAuthStore((s) => s.user?.needsPrivacyConsent)
+  return needsConsent ? <PrivacyConsentPage /> : <Outlet />
 }

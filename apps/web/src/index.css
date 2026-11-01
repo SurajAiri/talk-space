@@ -582,6 +582,12 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
 .switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .switch-label { font-weight: 600; color: var(--text); }
 .switch-desc { color: var(--text-2); font-size: 0.8125rem; line-height: 1.45; }
+/* a tick box with a sentence beside it (agreeing to something) */
+.check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 0.875rem; line-height: 1.45; color: var(--text-2); }
+.check.is-disabled { opacity: 0.55; cursor: not-allowed; }
+.check input[type='checkbox'] { margin: 2px 0 0; }
+.ff.has-error .check input[type='checkbox'] { outline: 2px solid var(--danger); outline-offset: 1px; }
+.check-text a { font-weight: 600; }
 .toolbar .switch { align-items: center; min-height: 46px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--surface); white-space: nowrap; }
 .toolbar .switch:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
 .toolbar .switch-track { margin-top: 0; }
@@ -882,6 +888,15 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   box-shadow: var(--shadow-lg), 0 0 0 1px rgb(255 255 255 / 0.04);
   animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.1);
 }
+/* the privacy consent screen: short, so it sizes to its content instead of filling the card */
+.onb-card-fit { max-width: 560px; min-height: 0; }
+.onb-card-fit .onb-foot { flex-wrap: wrap; }
+.onb-foot-note { color: var(--muted); font-size: 0.8125rem; }
+.consent-points { display: flex; flex-direction: column; gap: 10px; margin: 0 0 20px; padding: 0; list-style: none; }
+.consent-points li { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: 0.9rem; line-height: 1.5; }
+.consent-points strong { color: var(--text); }
+.consent-box { padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--r-md); }
+.consent-box + .notice { margin-top: 14px; }
 .onb-card-small { max-width: 420px; min-height: 0; align-items: center; gap: 14px; padding: 36px 28px; text-align: center; }
 .onb-head { display: flex; align-items: center; gap: 16px; padding: 22px 32px 0; }
 .onb-progress { display: flex; flex: 1; gap: 6px; }

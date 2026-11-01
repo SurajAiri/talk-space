@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref, type SyntheticEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
-import { toast } from 'sonner'
 import Avatar from '../components/Avatar'
 import ChipPicker from '../components/form/ChipPicker'
 import { TextArea } from '../components/form/fields'
@@ -11,12 +10,12 @@ import {
   ChevronLeftIcon,
   GlobeIcon,
   HeartIcon,
-  LogOutIcon,
   SparklesIcon,
   UserIcon,
   ZapIcon,
 } from '../components/Icons'
-import Logo, { LogoMark } from '../components/Logo'
+import { LogoMark } from '../components/Logo'
+import Backdrop from '../components/OnboardingBackdrop'
 import GenderPicker from '../components/profile/GenderPicker'
 import { useProfileOptions } from '../hooks/useProfileOptions'
 import type { Gender, User } from '../lib/api'
@@ -27,36 +26,6 @@ import { useAuthStore } from '../store/auth.store'
 const STEPS = 3
 /** How long the "all set" screen stays before moving on by itself. */
 const DONE_MS = 2400
-
-/** Backdrop shared by every state of the page: night sky, the room grid, and voice rings spreading outwards. */
-function Backdrop({ children }: { children: ReactNode }) {
-  const navigate = useNavigate()
-  const logout = useAuthStore((s) => s.logout)
-
-  function onLogout() {
-    logout()
-    toast.success('Logged out')
-    navigate('/auth', { replace: true })
-  }
-
-  return (
-    <div className="onb">
-      <div className="onb-rings" aria-hidden="true">
-        <span className="onb-ring" />
-        <span className="onb-ring" />
-        <span className="onb-ring" />
-      </div>
-      <header className="onb-top">
-        <Logo />
-        <button type="button" className="btn btn-ghost btn-small onb-logout" onClick={onLogout}>
-          <LogOutIcon size={16} />
-          Log out
-        </button>
-      </header>
-      {children}
-    </div>
-  )
-}
 
 export default function OnboardingPage() {
   const user = useAuthStore((s) => s.user)

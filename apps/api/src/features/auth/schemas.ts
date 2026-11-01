@@ -19,11 +19,20 @@ export const usernameField = z
     "Username must be 3-20 characters: letters, numbers or underscores",
   );
 
+/**
+ * Agreeing is part of creating an account: a missing or false value is refused, so the server
+ * never holds an email sign-up that did not accept (the web form's checkbox is only a convenience).
+ */
+export const acceptPrivacyPolicy = z.literal(true, {
+  error: "You must accept the Privacy Policy to create an account",
+});
+
 export const registerSchema = z.object({
   name: nameField,
   username: usernameField,
   email,
   password,
+  acceptPrivacyPolicy,
 });
 
 export const loginSchema = z.object({

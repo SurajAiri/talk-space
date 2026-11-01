@@ -24,6 +24,7 @@ import {
 import ChangePasswordDialog from '../components/profile/ChangePasswordDialog'
 import EditProfileDialog from '../components/profile/EditProfileDialog'
 import { useProfileOptions } from '../hooks/useProfileOptions'
+import { PRIVACY_POLICY_PATH } from '../lib/legal'
 import { genderLabel, languageNames } from '../lib/profile'
 import { useAuthStore } from '../store/auth.store'
 
@@ -123,6 +124,9 @@ export default function ProfilePage() {
 
   const joined = new Date(user.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const gender = genderLabel(options, user.gender)
+  const acceptedOn = user.privacyPolicyAcceptedAt
+    ? new Date(user.privacyPolicyAcceptedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })
+    : null
 
   return (
     <div className="app">
@@ -232,6 +236,11 @@ export default function ProfilePage() {
                   </Fact>
                   <Fact icon={<UserIcon size={16} />} label="Gender">
                     {gender ?? <span className="muted-inline">Not set</span>}
+                  </Fact>
+                  <Fact icon={<ShieldIcon size={16} />} label="Privacy Policy">
+                    {acceptedOn ? `Accepted ${acceptedOn}` : <span className="muted-inline">Not accepted</span>}
+                    {' · '}
+                    <Link to={PRIVACY_POLICY_PATH}>Read</Link>
                   </Fact>
                 </dl>
               </section>

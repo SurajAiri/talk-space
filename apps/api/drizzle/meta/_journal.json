@@ -29,6 +29,13 @@
       "when": 1793533121536,
       "tag": "0003_user_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793542348944,
+      "tag": "0004_user_privacy_consent",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, sql } from "drizzle-orm";
+import { PRIVACY_POLICY_VERSION } from "../../config/legal.config.js";
 import { db } from "../../db/index.js";
 import { users } from "../../db/schema/index.js";
 import { signJWT } from "../../services/jwt.service.js";
@@ -52,8 +53,16 @@ export async function register(input: RegisterInput) {
   try {
     const [created] = await db
       .insert(users)
-      // emailVerified stays false: nobody has proven they own this address yet
-      .values({ name, username, email, passwordHash })
+      // emailVerified stays false: nobody has proven they own this address yet.
+      // The schema only lets a sign-up through if it accepted the Privacy Policy, so record it now.
+      .values({
+        name,
+        username,
+        email,
+        passwordHash,
+        privacyPolicyAcceptedAt: sql`now()`,
+        privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+      })
       .returning(publicFields);
     if (!created) throw new AppError(500, "Failed to create user");
     return withToken(created);
@@ -190,6 +199,10 @@ export async function loginWithGoogle(profile: {
         .set({
           emailVerified: true,
           passwordHash: null,
+          // Whoever pre-registered this address may have ticked the Privacy Policy box, but the
+          // real owner never saw it. Their agreement doesn't count, so the owner is asked.
+          privacyPolicyAcceptedAt: null,
+          privacyPolicyVersion: null,
           tokenVersion: sql`${users.tokenVersion} + 1`,
         })
         .where(eq(users.id, existing.id))
@@ -208,6 +221,8 @@ export async function loginWithGoogle(profile: {
   try {
     const [created] = await db
       .insert(users)
+      // No Privacy Policy acceptance here: the person has not seen it yet. The web app asks for it
+      // on their first visit, before onboarding (POST /users/me/privacy-policy).
       .values({
         name: profile.name || email.split("@")[0]!,
         username: await generateUsername(email),

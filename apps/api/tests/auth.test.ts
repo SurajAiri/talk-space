@@ -15,7 +15,12 @@ describe("registration and login", () => {
   });
 
   test("rejects weak or oversized passwords and bad usernames", async () => {
-    const base = { name: "X", username: `ok_${uniq()}`.slice(0, 20), email: `${uniq()}@example.test` };
+    const base = {
+      name: "X",
+      username: `ok_${uniq()}`.slice(0, 20),
+      email: `${uniq()}@example.test`,
+      acceptPrivacyPolicy: true,
+    };
     const short = await http("/auth/register", { body: { ...base, password: "short" }, ip: "10.1.1.1" });
     assert.equal(short.status, 400);
     // bcrypt would silently ignore everything past 72 bytes
@@ -31,7 +36,13 @@ describe("registration and login", () => {
   test("duplicate email is refused", async () => {
     const u = await makeUser();
     const again = await http("/auth/register", {
-      body: { name: "Dup", username: `d_${uniq()}`.slice(0, 20), email: u.email, password: "long-enough-pw" },
+      body: {
+        name: "Dup",
+        username: `d_${uniq()}`.slice(0, 20),
+        email: u.email,
+        password: "long-enough-pw",
+        acceptPrivacyPolicy: true,
+      },
       ip: "10.1.2.1",
     });
     assert.equal(again.status, 409);

@@ -4,7 +4,7 @@ import {
   PROFILE_CONFIG,
   PROFILE_LANGUAGE_VALUES,
 } from "../../config/profile.config.js";
-import { nameField, usernameField } from "../auth/schemas.js";
+import { acceptPrivacyPolicy, nameField, usernameField } from "../auth/schemas.js";
 
 /** Letters and digits from any alphabet, plus a few marks that real interests use ("C++", "R&B", "Rock 'n' roll"). */
 const LABEL_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} .+#&'’/-]*$/u;
@@ -73,6 +73,11 @@ export const updateProfileSchema = z.object({
   spokenLanguages: languages.optional(),
   interests: interests.optional(),
   skills: skills.optional(),
+});
+
+/** The body of "I accept the Privacy Policy": it has to say so explicitly. */
+export const privacyPolicySchema = z.object({
+  accepted: acceptPrivacyPolicy,
 });
 
 export type OnboardingInput = z.infer<typeof onboardingSchema>;

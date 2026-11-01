@@ -18,6 +18,8 @@ interface AuthState {
     username: string
     email: string
     password: string
+    /** the sign-up form's checkbox; the API refuses anything but true */
+    acceptPrivacyPolicy: boolean
   }) => Promise<void>
   signInWithGoogle: () => Promise<void>
   /** Replaces the signed-in user, e.g. with the fresh copy the API returns after a profile change. */

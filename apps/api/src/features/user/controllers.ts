@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { publicProfileOptions } from "../../config/profile.config.js";
 import { AppError } from "../../utils/errors.js";
-import { onboardingSchema, updateProfileSchema } from "./schemas.js";
+import { onboardingSchema, privacyPolicySchema, updateProfileSchema } from "./schemas.js";
 import * as userService from "./services.js";
 
 function parse<S extends { safeParse: (d: unknown) => any }>(
@@ -34,4 +34,9 @@ export async function updateMe(req: Request, res: Response) {
 export async function completeOnboarding(req: Request, res: Response) {
   const input = parse(onboardingSchema, req.body);
   res.sendResponse(200, await userService.completeOnboarding(req.auth!.id, input), "Welcome aboard");
+}
+
+export async function acceptPrivacyPolicy(req: Request, res: Response) {
+  parse(privacyPolicySchema, req.body);
+  res.sendResponse(200, await userService.acceptPrivacyPolicy(req.auth!.id), "Privacy Policy accepted");
 }

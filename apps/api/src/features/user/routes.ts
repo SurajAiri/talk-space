@@ -15,5 +15,6 @@ router.get("/options", requireAuth, controllers.getOptions);
 router.get("/me", requireAuth, controllers.getMe);
 router.patch("/me", requireAuth, writeLimit, controllers.updateMe);
 router.post("/me/onboarding", requireAuth, writeLimit, controllers.completeOnboarding);
+router.post("/me/privacy-policy", requireAuth, writeLimit, controllers.acceptPrivacyPolicy);
 
 export default router;

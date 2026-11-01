@@ -48,6 +48,11 @@ export function validateExistingPassword(v: string): string | null {
   return v ? null : 'Enter your password'
 }
 
+/** The Privacy Policy checkbox: ticking it is required to create an account. */
+export function validatePrivacyConsent(accepted: boolean): string | null {
+  return accepted ? null : 'Please accept the Privacy Policy to continue'
+}
+
 export interface Strength {
   /** 0 = too short to use, 1..4 = weak .. strong */
   score: 0 | 1 | 2 | 3 | 4
