@@ -11,7 +11,7 @@ export const googleAuth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   basePath: "/api/v1/better-auth",
   secret: env.BETTER_AUTH_SECRET,
-  trustedOrigins: [env.WEB_URL, env.BETTER_AUTH_URL],
+  trustedOrigins: [...env.WEB_URLS, env.BETTER_AUTH_URL],
   session: {
     cookieCache: { enabled: true, maxAge: 5 * 60, strategy: "jwe" },
   },

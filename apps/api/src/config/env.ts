@@ -14,7 +14,9 @@ function originOf(name: string): string {
   try {
     return new URL(value).origin;
   } catch {
-    throw new Error(`${name} must be a full URL such as https://example.com (got "${value}")`);
+    throw new Error(
+      `${name} must be a full URL such as https://example.com (got "${value}")`,
+    );
   }
 }
 
@@ -29,7 +31,8 @@ function int(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === "") return fallback;
   const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) throw new Error(`${name} must be a non-negative integer`);
+  if (!Number.isInteger(n) || n < 0)
+    throw new Error(`${name} must be a non-negative integer`);
   return n;
 }
 
@@ -43,7 +46,13 @@ const NODE_ENV = process.env.NODE_ENV ?? "development";
 const isProd = NODE_ENV === "production";
 
 /** Secrets that must never reach production. */
-const PLACEHOLDERS = new Set(["change-me", "change-me-too", "secret", "password", ""]);
+const PLACEHOLDERS = new Set([
+  "change-me",
+  "change-me-too",
+  "secret",
+  "password",
+  "",
+]);
 
 function secret(name: string): string {
   const value = required(name);
@@ -59,21 +68,28 @@ function secret(name: string): string {
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "";
 if (Boolean(GOOGLE_CLIENT_ID) !== Boolean(GOOGLE_CLIENT_SECRET)) {
-  throw new Error("Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither.");
+  throw new Error(
+    "Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither.",
+  );
 }
 
 const TURN_URLS = list(process.env.TURN_URLS ?? "");
 const TURN_SECRET = process.env.TURN_SECRET ?? "";
 if (TURN_URLS.length > 0) {
-  if (!TURN_SECRET) throw new Error("TURN_URLS is set but TURN_SECRET is empty.");
+  if (!TURN_SECRET)
+    throw new Error("TURN_URLS is set but TURN_SECRET is empty.");
   if (isProd && (PLACEHOLDERS.has(TURN_SECRET) || TURN_SECRET.length < 32)) {
-    throw new Error("TURN_SECRET must be a random string of at least 32 characters in production.");
+    throw new Error(
+      "TURN_SECRET must be a random string of at least 32 characters in production.",
+    );
   }
 }
 
 const FORCE_RELAY = bool("FORCE_RELAY");
 if (FORCE_RELAY && TURN_URLS.length === 0) {
-  throw new Error("FORCE_RELAY=true needs TURN_URLS: relay-only connections cannot work without a TURN server.");
+  throw new Error(
+    "FORCE_RELAY=true needs TURN_URLS: relay-only connections cannot work without a TURN server.",
+  );
 }
 
 export const env = {
@@ -91,7 +107,8 @@ export const env = {
   /** Public address of THIS API (Google redirects the browser back to it). */
   BETTER_AUTH_URL: originOf("BETTER_AUTH_URL"),
   /** Address of the web app; the only origin allowed to call this API from a browser. */
-  WEB_URL: originOf("WEB_URL"),
+  WEB_URLS: list(required("WEB_URLS")).map((u) => new URL(u).origin),
+  // WEB_URL: originOf("WEB_URL"),
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_ENABLED: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
