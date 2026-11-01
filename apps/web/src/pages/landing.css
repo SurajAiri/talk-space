@@ -7,7 +7,10 @@
   --ink: #0e1220;
   --ink-2: #3d4558;
   --mute: #5b6479;
-  --paper: #f3f4f7;
+  --sky: #d7ebfa;
+  --meadow: #e3f0d6;
+  --sand: #f6ecd0;
+  --tile: rgb(255 255 255 / 0.42);
   --line: #d6dae4;
   --cobalt: #3454f0;
   --grass: #3f8f4e;
@@ -18,7 +21,7 @@
   font-size: 1.0625rem;
   line-height: 1.55;
   color: var(--ink);
-  background: #fff;
+  background: var(--sky);
   overflow-x: clip;
 }
 .lp h1, .lp h2, .lp h3 { font-family: var(--font-display); margin: 0; }
@@ -36,6 +39,7 @@
 .lp-ready [data-reveal].lp-in { opacity: 1; transform: none; }
 
 /* ---------- shared pieces ---------- */
+.lp-tiled { background-image: conic-gradient(var(--tile) 25%, transparent 0 50%, var(--tile) 0 75%, transparent 0); background-size: 96px 96px; }
 .lp-frame { border: 2px solid var(--ink); border-radius: 18px; box-shadow: var(--shadow); background: #fff; overflow: hidden; }
 .lp-btn {
   display: inline-flex; align-items: center; justify-content: center; padding: 0.85rem 1.5rem;
@@ -51,7 +55,7 @@
 .lp a:focus-visible, .lp-canvas:focus-visible { outline: 3px solid var(--cobalt); outline-offset: 3px; }
 .lp-actions { display: flex; flex-wrap: wrap; gap: 16px; }
 .lp-sec { padding: 120px 0; }
-.lp-white { background: #fff; } .lp-paper { background: var(--paper); }
+.lp-sky { background-color: var(--sky); } .lp-meadow { background-color: var(--meadow); } .lp-sand { background-color: var(--sand); }
 .lp-ink { background: var(--ink); color: #fff; }
 .lp-h2 { font-size: clamp(2.3rem, 5.2vw, 4.2rem); line-height: 1; font-weight: 800; letter-spacing: -0.035em; max-width: 14ch; }
 .lp-sub { font-size: 1.2rem; color: var(--ink-2); max-width: 30rem; }
@@ -59,7 +63,7 @@
 .lp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
 
 /* ---------- hero ---------- */
-.lp-hero { background: #fff; padding-bottom: 96px; }
+.lp-hero { background-color: var(--sky); padding-bottom: 96px; }
 .lp-nav { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; padding-bottom: 22px; }
 .lp-brand { display: inline-flex; align-items: center; gap: 10px; font: 800 1.35rem var(--font-display); letter-spacing: -0.02em; }
 .lp-brand-sm { font-size: 1.1rem; color: #fff; }
