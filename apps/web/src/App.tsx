@@ -4,6 +4,7 @@ import { Toaster } from 'sonner'
 import { ProtectedRoute, PublicOnlyRoute } from './components/RouteGuards'
 import AuthPage from './pages/AuthPage'
 import GoogleCallbackPage from './pages/GoogleCallbackPage'
+import LandingPage from './pages/LandingPage'
 import LobbyPage from './pages/LobbyPage'
 import ProfilePage from './pages/ProfilePage'
 import RoomPage from './pages/RoomPage'
@@ -44,6 +45,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/auth/callback" element={<GoogleCallbackPage />} />
+        <Route path="/" element={<LandingPage />} />
         <Route element={<PublicOnlyRoute />}>
           <Route path="/auth" element={<AuthPage />} />
         </Route>
