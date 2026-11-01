@@ -15,7 +15,7 @@ export const googleAuth = betterAuth({
   session: {
     cookieCache: { enabled: true, maxAge: 5 * 60, strategy: "jwe" },
   },
-  advanced: { defaultCookieAttributes: { sameSite: "none", secure: true } },
+  // advanced: { defaultCookieAttributes: { sameSite: "none", secure: true } },
   socialProviders: env.GOOGLE_ENABLED
     ? {
         google: {

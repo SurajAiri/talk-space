@@ -3,10 +3,17 @@ import { fromNodeHeaders } from "better-auth/node";
 import { env } from "../../config/env.js";
 import { googleAuth } from "../../lib/better-auth.js";
 import { AppError } from "../../utils/errors.js";
-import { changePasswordSchema, loginSchema, registerSchema } from "./schemas.js";
+import {
+  changePasswordSchema,
+  loginSchema,
+  registerSchema,
+} from "./schemas.js";
 import * as authService from "./services.js";
 
-function parse<T>(schema: { safeParse: (d: unknown) => any }, body: unknown): T {
+function parse<T>(
+  schema: { safeParse: (d: unknown) => any },
+  body: unknown,
+): T {
   const result = schema.safeParse(body);
   if (!result.success) {
     throw new AppError(400, result.error.issues[0]?.message ?? "Invalid input");
@@ -43,11 +50,14 @@ export async function refresh(req: Request, res: Response) {
 }
 
 export async function changePassword(req: Request, res: Response) {
-  const { currentPassword, newPassword } = parse<ReturnType<typeof changePasswordSchema.parse>>(
-    changePasswordSchema,
-    req.body,
+  const { currentPassword, newPassword } = parse<
+    ReturnType<typeof changePasswordSchema.parse>
+  >(changePasswordSchema, req.body);
+  const result = await authService.changePassword(
+    req.auth!.id,
+    currentPassword,
+    newPassword,
   );
-  const result = await authService.changePassword(req.auth!.id, currentPassword, newPassword);
   res.sendResponse(200, { token: result.token }, "Password changed");
 }
 
@@ -70,7 +80,10 @@ export async function googleComplete(req: Request, res: Response) {
   const session = await googleAuth.api.getSession({
     headers: fromNodeHeaders(req.headers),
   });
-  if (!session) return fail("Google login failed");
+  if (!session) {
+    console.warn("google/complete: NO SESSION COOKIE ARRIVED");
+    return fail("Google login failed");
+  }
 
   try {
     const { token } = await authService.loginWithGoogle({
@@ -80,6 +93,7 @@ export async function googleComplete(req: Request, res: Response) {
     });
     res.redirect(`${env.WEB_URL}/auth/callback#token=${token}`);
   } catch (err) {
+    console.error("google/complete failed:", err);
     fail(err instanceof AppError ? err.message : "Google login failed");
   }
 }
