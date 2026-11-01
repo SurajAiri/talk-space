@@ -108,7 +108,7 @@ export const env = {
   BETTER_AUTH_URL: originOf("BETTER_AUTH_URL"),
   /** Address of the web app; the only origin allowed to call this API from a browser. */
   WEB_URLS: list(required("WEB_URLS")).map((u) => new URL(u).origin),
-  // WEB_URL: originOf("WEB_URL"),
+  WEB_URL: list(required("WEB_URLS"))[0],
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_ENABLED: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
