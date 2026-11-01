@@ -7,7 +7,9 @@ const router = Router();
 
 const emailOf = (body: unknown): string | null => {
   const email = (body as { email?: unknown } | null)?.email;
-  return typeof email === "string" && email.length < 320 ? hashKey(email.trim().toLowerCase()) : null;
+  return typeof email === "string" && email.length < 320
+    ? hashKey(email.trim().toLowerCase())
+    : null;
 };
 
 router.get("/providers", controllers.providers);
@@ -19,7 +21,12 @@ router.post(
   "/login",
   rateLimit(
     { name: "login:ip", limit: 30, windowSeconds: 600, by: clientIp },
-    { name: "login:acct", limit: 8, windowSeconds: 600, by: (req) => emailOf(req.body) },
+    {
+      name: "login:acct",
+      limit: 8,
+      windowSeconds: 600,
+      by: (req) => emailOf(req.body),
+    },
   ),
   controllers.login,
 );
@@ -27,7 +34,12 @@ router.post(
   "/register",
   rateLimit(
     { name: "register:ip", limit: 10, windowSeconds: 3600, by: clientIp },
-    { name: "register:email", limit: 3, windowSeconds: 3600, by: (req) => emailOf(req.body) },
+    {
+      name: "register:email",
+      limit: 3,
+      windowSeconds: 3600,
+      by: (req) => emailOf(req.body),
+    },
   ),
   controllers.register,
 );
@@ -40,7 +52,12 @@ router.get(
 router.post(
   "/refresh",
   requireAuth,
-  rateLimit({ name: "refresh:user", limit: 120, windowSeconds: 3600, by: (req) => req.auth?.id }),
+  rateLimit({
+    name: "refresh:user",
+    limit: 120,
+    windowSeconds: 3600,
+    by: (req) => req.auth?.id,
+  }),
   controllers.refresh,
 );
 // Someone holding a stolen token must not be able to guess the current password at leisure.
@@ -48,7 +65,12 @@ router.post(
   "/change-password",
   requireAuth,
   rateLimit(
-    { name: "pwchange:user", limit: 5, windowSeconds: 600, by: (req) => req.auth?.id },
+    {
+      name: "pwchange:user",
+      limit: 5,
+      windowSeconds: 600,
+      by: (req) => req.auth?.id,
+    },
     { name: "pwchange:ip", limit: 30, windowSeconds: 600, by: clientIp },
   ),
   controllers.changePassword,
