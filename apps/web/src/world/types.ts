@@ -80,6 +80,7 @@ export interface Character {
   shirt: string
   pants: string
   accessory: string
-  speechBubble: { text: string; timer: number } | null
+  /** `age` and `timer` (time left) are in ms; `dm` = a private message. */
+  speechBubble: { text: string; dm: boolean; age: number; timer: number } | null
   reaction: { emoji: string; timer: number; scale: number } | null
 }

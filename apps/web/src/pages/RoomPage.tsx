@@ -1,13 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import AppHeader from '../components/AppHeader'
-import ChatPanel from '../components/ChatPanel'
-import CopyButton from '../components/CopyButton'
-import { GlobeIcon, HeadphonesIcon, LockIcon, MapIcon, MicIcon, MicOffIcon, PhoneOffIcon, ShieldIcon, UsersIcon } from '../components/Icons'
+import { CodeInput, Switch } from '../components/form/fields'
+import { GlobeIcon, HeadphonesIcon, LockIcon, MicIcon, ShieldIcon, UsersIcon } from '../components/Icons'
 import MapThumb from '../components/MapThumb'
 import ParticipantList from '../components/ParticipantList'
+import RemoteAudio from '../components/RemoteAudio'
+import ChatWindow from '../components/room/ChatWindow'
+import FloatPanel from '../components/room/FloatPanel'
+import HearingChip from '../components/room/HearingChip'
+import Joystick from '../components/room/Joystick'
+import MessageTiles from '../components/room/MessageTiles'
+import MicDock from '../components/room/MicDock'
+import RoomTopBar from '../components/room/RoomTopBar'
+import RotatePrompt from '../components/room/RotatePrompt'
 import WorldView from '../components/WorldView'
 import { useRoomConfig } from '../hooks/useRoomConfig'
+import { useCoarsePointer, usePortrait, useShortScreen } from '../hooks/useMedia'
+import { enterImmersive, exitImmersive, fullscreenSupported, useIsFullscreen } from '../lib/fullscreen'
 import { labelFor, roomsApi, type RoomPreview } from '../lib/rooms'
 import { useRoomStore } from '../store/room.store'
 
@@ -18,14 +28,6 @@ type PreviewState =
 
 const ROOM_ID = /^[A-Z]{6}$/
 
-const MIC_HINT: Partial<Record<string, string>> = {
-  off: 'You’re listening only.',
-  denied: 'Microphone is blocked. Allow it in your browser’s site settings, then try again.',
-  unavailable: 'No working microphone was found on this device.',
-  unsupported:
-    'This browser only allows the microphone on secure pages. Open the site over HTTPS (or localhost).',
-}
-
 export default function RoomPage() {
   const params = useParams()
   const roomId = (params.roomId ?? '').toUpperCase()
@@ -35,6 +37,7 @@ export default function RoomPage() {
   useEffect(() => {
     return () => {
       void useRoomStore.getState().leave()
+      void exitImmersive()
     }
   }, [])
 
@@ -95,6 +98,7 @@ function PreJoin({ roomId }: { roomId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [hideIp, setHideIp] = useState(false)
   const joining = status === 'joining'
+  const coarse = useCoarsePointer()
 
   useEffect(() => {
     if (status !== 'idle') return
@@ -117,6 +121,8 @@ function PreJoin({ roomId }: { roomId: string }) {
 
   async function onJoin(withMic: boolean) {
     setError(null)
+    // phones: full screen + landscape need this click, so ask before the (slow) join starts
+    if (coarse) void enterImmersive(true)
     const res = await join(roomId, { joinCode: code || undefined, withMic, hideIp })
     if (!res.ok && res.code !== 'CANCELLED') setError(res.message)
   }
@@ -183,17 +189,15 @@ function PreJoin({ roomId }: { roomId: string }) {
           </p>
 
           {isPrivate && (
-            <label className="field">
-              Join code
-              <input
-                placeholder={`${codeLength} digits`}
-                value={code}
-                maxLength={codeLength}
-                inputMode="numeric"
-                autoComplete="off"
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              />
-            </label>
+            <CodeInput
+              label="Join code"
+              length={codeLength}
+              mode="digits"
+              value={code}
+              onValueChange={setCode}
+              hint={`${codeLength} digits, from whoever invited you`}
+              autoFocus={!initialCode}
+            />
           )}
 
           {error && (
@@ -211,24 +215,20 @@ function PreJoin({ roomId }: { roomId: string }) {
               </div>
             </div>
           ) : (
-            <label className="option-row">
-              <input
-                type="checkbox"
-                checked={hideIp}
-                disabled={!config?.relayAvailable}
-                onChange={(e) => setHideIp(e.target.checked)}
-              />
-              <div>
-                <strong>Hide my IP address</strong>
-                <span>
-                  {config?.relayAvailable
-                    ? hideIp
-                      ? 'You connect through a relay: a little more delay, and nobody sees your IP.'
-                      : 'Connect through a relay for a little more delay. Otherwise other participants can see your IP, because voice and chat go directly between browsers.'
-                    : 'Unavailable: this server has no relay. Other participants can see your IP, because voice and chat go directly between browsers.'}
-                </span>
-              </div>
-            </label>
+            <Switch
+              checked={hideIp}
+              disabled={!config?.relayAvailable}
+              onChange={setHideIp}
+              description={
+                config?.relayAvailable
+                  ? hideIp
+                    ? 'You connect through a relay: a little more delay, and nobody sees your IP.'
+                    : 'Otherwise other participants can see your IP, because voice and chat go directly between browsers.'
+                  : 'Unavailable: this server has no relay. Other participants can see your IP, because voice and chat go directly between browsers.'
+              }
+            >
+              Hide my IP address
+            </Switch>
           )}
 
           <div className="stack">
@@ -254,108 +254,180 @@ function InRoom() {
   const status = useRoomStore((s) => s.status)
   const room = useRoomStore((s) => s.room)
   const peerCount = useRoomStore((s) => Object.keys(s.peers).length)
-  const mic = useRoomStore((s) => s.mic)
-  const muted = useRoomStore((s) => s.muted)
   const world = useRoomStore((s) => s.world)
-  const toggleMute = useRoomStore((s) => s.toggleMute)
-  const enableMic = useRoomStore((s) => s.enableMic)
+  const messages = useRoomStore((s) => s.messages)
+  const blocked = useRoomStore((s) => s.blocked)
   const leave = useRoomStore((s) => s.leave)
+
+  const coarse = useCoarsePointer()
+  const portrait = usePortrait()
+  const short = useShortScreen()
+  const fullscreen = useIsFullscreen()
+
+  // rooms without a map have nothing else to look at, so their panels start open
+  const [chatOpen, setChatOpen] = useState(() => !useRoomStore.getState().world)
+  const [peopleOpen, setPeopleOpen] = useState(() => !useRoomStore.getState().world)
+  const [chatTo, setChatTo] = useState('all')
+  // "read" = the chat was open when it arrived. Tracked by message id, so it survives the log being trimmed.
+  const latestId = messages.at(-1)?.id ?? null
+  const [seenId, setSeenId] = useState<string | null>(() => useRoomStore.getState().messages.at(-1)?.id ?? null)
+  if (chatOpen && seenId !== latestId) setSeenId(latestId)
+  const seenIndex = seenId ? messages.findIndex((m) => m.id === seenId) : -1
+  const unread = messages.slice(seenIndex + 1).filter((m) => !m.self && !blocked[m.fromId]).length
+
+  // on a short screen two panels would cover the whole map: only one at a time
+  const openChat = useCallback(
+    (to?: string) => {
+      if (to) setChatTo(to)
+      setChatOpen(true)
+      if (short) setPeopleOpen(false)
+    },
+    [short],
+  )
+  const openPeople = useCallback(() => {
+    setPeopleOpen(true)
+    if (short) setChatOpen(false)
+  }, [short])
 
   if (!room) return null
 
   async function onLeave() {
     await leave()
+    void exitImmersive()
     navigate('/home', { replace: true })
   }
 
+  async function toggleFullscreen() {
+    if (fullscreen) await exitImmersive()
+    else await enterImmersive(coarse)
+  }
+
+  const map = world?.map
+
   return (
-    <div className="app app-room">
-      <AppHeader />
-      <main className={world ? 'room room-wide' : 'room'}>
-        <header className="room-head">
-          <div>
-            <h1>{room.title}</h1>
-            <div className="chips">
-              <span className="chip">
-                <GlobeIcon size={13} />
-                {labelFor(config?.languages, room.language)}
-              </span>
-              <span className="chip chip-neutral">{labelFor(config?.purposes, room.purpose)}</span>
-              {world && (
-                <span className="chip chip-neutral">
-                  <MapIcon size={13} />
-                  {world.map.title}
-                </span>
-              )}
-              {room.tags.map((t) => (
-                <span key={t} className="chip chip-tag">
-                  #{t}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="room-head-actions">
-            <CopyButton value={room.id} label="Room ID" />
-            {room.joinCode && <CopyButton value={room.joinCode} label="Join code" />}
-          </div>
-        </header>
-
-        {status === 'reconnecting' && (
-          <p className="notice notice-warn" role="status">
-            Connection to the server was lost. Reconnecting…
-          </p>
-        )}
-
-        <div className={world ? 'room-body room-body-world' : 'room-body'}>
-          {world && (
-            <section className="panel panel-world" aria-label="World">
-              <WorldView session={world} />
-            </section>
-          )}
-          <section className="panel panel-people" aria-label="People">
-            <div className="panel-head">
-              <h2>People</h2>
-              <span className="count-pill">
-                {peerCount + 1} of {room.maxMembers}
-              </span>
-            </div>
-            <ParticipantList />
-          </section>
-          <section className="panel panel-chat" aria-label="Chat">
-            <div className="panel-head">
-              <h2>Chat</h2>
-            </div>
-            <ChatPanel maxLength={config?.chatMessageMax ?? 2000} />
-          </section>
+    <div className="room-screen">
+      {world ? (
+        <div className="room-world">
+          <WorldView session={world} />
         </div>
+      ) : (
+        <div className="room-backdrop" />
+      )}
+      {/* with a map, voices are played by the proximity mixer (so they fade with distance); without, plainly */}
+      {!world && <RemoteAudioHost />}
 
-        <footer className="dock">
-          {mic === 'on' ? (
-            <button
-              type="button"
-              className={muted ? 'btn btn-outline dock-btn is-muted' : 'btn btn-outline dock-btn is-live'}
-              onClick={toggleMute}
-              aria-pressed={!muted}
-            >
-              {muted ? <MicOffIcon size={19} /> : <MicIcon size={19} />}
-              {muted ? 'Unmute microphone' : 'Mute microphone'}
-            </button>
-          ) : (
-            <button type="button" className="btn dock-btn" onClick={() => void enableMic()}>
-              <MicIcon size={19} />
-              Turn on microphone
-            </button>
-          )}
-          <span className="dock-status" role="status">
-            {MIC_HINT[mic] ?? (muted ? 'You’re muted.' : 'Others can hear you.')}
-          </span>
-          <span className="dock-sep" aria-hidden="true" />
-          <button type="button" className="btn btn-danger dock-btn" onClick={onLeave}>
-            <PhoneOffIcon size={19} />
-            Leave
-          </button>
-        </footer>
-      </main>
+      <RoomTopBar
+        room={room}
+        config={config}
+        mapTitle={map?.title}
+        count={peerCount + 1}
+        unread={unread}
+        chatOpen={chatOpen}
+        peopleOpen={peopleOpen}
+        fullscreen={fullscreen}
+        canFullscreen={fullscreenSupported()}
+        onChat={() => (chatOpen ? setChatOpen(false) : openChat())}
+        onPeople={() => (peopleOpen ? setPeopleOpen(false) : openPeople())}
+        onFullscreen={() => void toggleFullscreen()}
+        onLeave={() => void onLeave()}
+      />
+
+      {status === 'reconnecting' && (
+        <p className="notice notice-warn rtoast" role="status">
+          Connection to the server was lost. Reconnecting…
+        </p>
+      )}
+
+      {world && (
+        <div className="room-bl">
+          <HearingChip session={world} onClick={openPeople} />
+        </div>
+      )}
+      {world && coarse && <Joystick session={world} />}
+      <MoveHint coarse={coarse} />
+
+      <MessageTiles messages={messages} seenId={seenId} chatOpen={chatOpen} blocked={blocked} onOpen={(from, dm) => openChat(dm ? from : undefined)} />
+      <MicDock />
+
+      {chatOpen && (
+        <FloatPanel id="chat" title="Chat" width={short ? 300 : 360} height={540} anchor="right" onClose={() => setChatOpen(false)}>
+          <ChatWindow to={chatTo} onToChange={setChatTo} maxLength={config?.chatMessageMax ?? 2000} autoFocus={!coarse} />
+        </FloatPanel>
+      )}
+      {peopleOpen && (
+        <FloatPanel
+          id="people"
+          title="People"
+          width={340}
+          height={460}
+          fit
+          anchor="left"
+          onClose={() => setPeopleOpen(false)}
+          headerExtra={
+            <span className="count-pill">
+              {peerCount + 1} of {room.maxMembers}
+            </span>
+          }
+        >
+          <ParticipantList
+            onMessage={(id) => {
+              openChat(id)
+            }}
+          />
+        </FloatPanel>
+      )}
+
+      {coarse && portrait && <RotatePrompt onLeave={() => void onLeave()} />}
     </div>
+  )
+}
+
+/** Plays everyone's voice when the room has no map (with a map, ProximityMixer does it). */
+function RemoteAudioHost() {
+  const peers = useRoomStore((s) => s.peers)
+  const blocked = useRoomStore((s) => s.blocked)
+  return (
+    <>
+      {Object.values(peers).map((p) => (
+        <RemoteAudio key={p.id} stream={blocked[p.id] ? null : p.stream} />
+      ))}
+    </>
+  )
+}
+
+const HINT_KEY = 'ts.hint.move'
+
+/** A one-time nudge about how to walk, gone after a few seconds (and never shown again on this browser). */
+function MoveHint({ coarse }: { coarse: boolean }) {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem(HINT_KEY) !== '1'
+    } catch {
+      return true
+    }
+  })
+  useEffect(() => {
+    if (!show) return
+    const t = setTimeout(() => {
+      setShow(false)
+      try {
+        localStorage.setItem(HINT_KEY, '1')
+      } catch {
+        /* fine */
+      }
+    }, 8000)
+    return () => clearTimeout(t)
+  }, [show])
+  if (!show) return null
+  return (
+    <p className="movehint" role="status">
+      {coarse ? (
+        <>Drag the joystick or tap the map to walk. Pinch to zoom.</>
+      ) : (
+        <>
+          Walk with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or click the map. Scroll to zoom.
+        </>
+      )}
+    </p>
   )
 }

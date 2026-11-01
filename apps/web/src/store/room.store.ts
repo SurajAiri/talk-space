@@ -27,6 +27,10 @@ export interface ChatMessage {
   /** when WE received it: a peer's own clock is not trusted for ordering */
   ts: number
   self: boolean
+  /** sent to one person only. `toId`/`toName` say who (for our own messages); for received ones it is us. */
+  dm: boolean
+  toId?: string
+  toName?: string
 }
 
 interface JoinAck {
@@ -66,7 +70,8 @@ interface RoomState {
     opts: { joinCode?: string; withMic: boolean; hideIp?: boolean },
   ) => Promise<JoinResult>
   leave: () => Promise<void>
-  sendChat: (text: string) => 'sent' | 'invalid' | 'slow-down'
+  /** `toId` set: a direct message to that one person; otherwise everyone in the room. */
+  sendChat: (text: string, toId?: string) => 'sent' | 'invalid' | 'slow-down' | 'unreachable'
   enableMic: () => Promise<void>
   toggleMute: () => void
   blockPeer: (id: string) => void
@@ -324,9 +329,11 @@ export const useRoomStore = create<RoomState>()((set, get) => {
           // ordered by when it reached us, not by a clock the sender controls
           ts: Date.now(),
           self: false,
+          dm: msg.dm === true,
         },
       ].slice(-MAX_MESSAGES),
     }))
+    world?.say(from, msg.text, msg.dm === true)
   }
 
   function blockPeer(id: string) {
@@ -454,22 +461,30 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       set({ ...initial, blocked: blockedRecord() })
     },
 
-    sendChat: (text) => {
+    sendChat: (text, toId) => {
       const trimmed = text.trim()
-      const { selfId, status } = get()
+      const { selfId, status, peers } = get()
       // Chat travels peer-to-peer, so it keeps working while only the signaling connection is down.
       const live = status === 'joined' || status === 'reconnecting'
       if (!trimmed || trimmed.length > chatMax || !live || !selfId) return 'invalid'
       if (!chatBucket.take()) return 'slow-down'
 
-      const msg = { type: 'chat' as const, id: newId(), text: trimmed, ts: Date.now() }
-      manager?.broadcast(msg)
+      const base = { type: 'chat' as const, id: newId(), text: trimmed, ts: Date.now() }
+      let to: PeerView | undefined
+      if (toId) {
+        to = peers[toId]
+        // nobody to deliver to: say so instead of showing a message that no one received
+        if (!to || !manager?.sendTo(toId, { ...base, dm: true })) return 'unreachable'
+      } else {
+        manager?.broadcast(base)
+      }
       set((s) => ({
         messages: [
           ...s.messages,
-          { id: msg.id, fromId: selfId, fromName: 'You', text: trimmed, ts: msg.ts, self: true },
+          { id: base.id, fromId: selfId, fromName: 'You', text: trimmed, ts: base.ts, self: true, dm: Boolean(to), toId: to?.id, toName: to?.name },
         ].slice(-MAX_MESSAGES),
       }))
+      get().world?.say(selfId, trimmed, Boolean(to))
       return 'sent'
     },
 

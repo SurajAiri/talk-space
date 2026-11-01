@@ -14,8 +14,13 @@ const SPEED = 198
 const REMOTE_SMOOTHING = 14 // higher = remote avatars snap to their network position faster
 const CAMERA_SMOOTHING = 9
 const SNAP_DISTANCE = 6 * TILE // farther than this (join, lag spike): jump instead of gliding across the map
-const MIN_ZOOM = 0.6
-const MAX_ZOOM = 1.6
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 2
+/** Fit about this many tiles top to bottom, so a phone held sideways and a big monitor both show a comfortable slice. */
+const FIT_TILES_TALL = 12
+const STICK_DEADZONE = 0.16
+const TAP_MAX_MS = 600
+const TAP_MAX_MOVE = 10 // px: a finger that travels further than this is panning/pinching, not tapping
 
 const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'])
 
@@ -63,6 +68,10 @@ export class WorldEngine {
   private camera: { x: number; y: number }
   private view = { x: 0, y: 0 } // clamped camera centre of the last frame (for click -> world mapping)
   private zoom = 1
+  private userZoomed = false // once someone zooms by hand, stop re-fitting on resize/rotation
+  private readonly pointers = new Map<number, { x: number; y: number }>()
+  private tap: { id: number; x: number; y: number; t: number } | null = null
+  private pinch: { dist: number; zoom: number } | null = null
   private dpr = 1
   private cssW = 1
   private cssH = 1
@@ -106,6 +115,9 @@ export class WorldEngine {
     this.listen(window, 'keyup', this.onKeyUp as EventListener)
     this.listen(window, 'blur', () => this.keys.clear())
     this.listen(this.canvas, 'pointerdown', this.onPointerDown as EventListener)
+    this.listen(this.canvas, 'pointermove', this.onPointerMove as EventListener)
+    this.listen(this.canvas, 'pointerup', this.onPointerUp as EventListener)
+    this.listen(this.canvas, 'pointercancel', this.onPointerCancel as EventListener)
     this.listen(this.canvas, 'wheel', this.onWheel as EventListener, { passive: false })
 
     const ro = new ResizeObserver(() => this.resize())
@@ -145,9 +157,67 @@ export class WorldEngine {
 
   private readonly onPointerDown = (e: PointerEvent) => {
     this.session.mixer.resume()
+    try {
+      this.canvas.setPointerCapture(e.pointerId)
+    } catch {
+      /* not capturable (synthetic event): fine */
+    }
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (e.pointerType === 'mouse') {
+      // a click is a click the moment it lands
+      if (e.button === 0) this.moveToward(e.clientX, e.clientY)
+      return
+    }
+    if (this.pointers.size === 1) {
+      this.tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }
+    } else {
+      // a second finger: this is a pinch, not a tap
+      this.tap = null
+      this.pinch = { dist: this.pointerSpread(), zoom: this.zoom }
+    }
+  }
+
+  private readonly onPointerMove = (e: PointerEvent) => {
+    const p = this.pointers.get(e.pointerId)
+    if (!p) return
+    p.x = e.clientX
+    p.y = e.clientY
+    if (this.tap && this.tap.id === e.pointerId && Math.hypot(e.clientX - this.tap.x, e.clientY - this.tap.y) > TAP_MAX_MOVE) {
+      this.tap = null
+    }
+    if (this.pinch && this.pointers.size >= 2) {
+      const spread = this.pointerSpread()
+      if (this.pinch.dist > 0 && spread > 0) {
+        this.userZoomed = true
+        this.zoom = clamp(this.pinch.zoom * (spread / this.pinch.dist), MIN_ZOOM, MAX_ZOOM)
+      }
+    }
+  }
+
+  private readonly onPointerUp = (e: PointerEvent) => {
+    const tap = this.tap
+    this.pointers.delete(e.pointerId)
+    if (this.pointers.size < 2) this.pinch = null
+    if (tap && tap.id === e.pointerId && performance.now() - tap.t < TAP_MAX_MS) this.moveToward(tap.x, tap.y)
+    if (tap && tap.id === e.pointerId) this.tap = null
+  }
+
+  private readonly onPointerCancel = (e: PointerEvent) => {
+    this.pointers.delete(e.pointerId)
+    this.tap = null
+    if (this.pointers.size < 2) this.pinch = null
+  }
+
+  private pointerSpread(): number {
+    const [a, b] = [...this.pointers.values()]
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0
+  }
+
+  /** Walk to the tile under a screen point (if there is a way there). */
+  private moveToward(clientX: number, clientY: number) {
     const rect = this.canvas.getBoundingClientRect()
-    const wx = (e.clientX - rect.left - this.cssW / 2) / this.zoom + this.view.x
-    const wy = (e.clientY - rect.top - this.cssH / 2) / this.zoom + this.view.y
+    const wx = (clientX - rect.left - this.cssW / 2) / this.zoom + this.view.x
+    const wy = (clientY - rect.top - this.cssH / 2) / this.zoom + this.view.y
     const path = findPath(
       this.session.map,
       { col: Math.floor(this.player.x / TILE), row: Math.floor(this.player.y / TILE) },
@@ -160,6 +230,7 @@ export class WorldEngine {
 
   private readonly onWheel = (e: WheelEvent) => {
     e.preventDefault()
+    this.userZoomed = true
     this.zoom = clamp(this.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), MIN_ZOOM, MAX_ZOOM)
   }
 
@@ -170,6 +241,7 @@ export class WorldEngine {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2) // 3x phones would 9x the fill cost for no visible gain
     this.canvas.width = Math.round(this.cssW * this.dpr)
     this.canvas.height = Math.round(this.cssH * this.dpr)
+    if (!this.userZoomed) this.zoom = clamp(this.cssH / (FIT_TILES_TALL * TILE), 0.7, 1.3)
   }
 
   // ---------- loop ----------
@@ -205,11 +277,20 @@ export class WorldEngine {
 
     let maxStep = Infinity
     let followingPath = false
+    let speedScale = 1
+    const stick = this.session.joystick
+    const stickMag = Math.hypot(stick.x, stick.y)
     if (dx !== 0 || dy !== 0) {
       this.path = []
       const len = Math.hypot(dx, dy)
       dx /= len
       dy /= len
+    } else if (stickMag > STICK_DEADZONE) {
+      // analog: a light push walks slowly, a full push at full speed
+      this.path = []
+      dx = stick.x / stickMag
+      dy = stick.y / stickMag
+      speedScale = Math.min(1, (stickMag - STICK_DEADZONE) / (1 - STICK_DEADZONE) * 1.15)
     } else {
       while (this.path.length) {
         const wp = this.path[0]!
@@ -233,7 +314,7 @@ export class WorldEngine {
     const oy = p.y
     if (dx !== 0 || dy !== 0) {
       p.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up'
-      const step = Math.min(SPEED * dt, maxStep)
+      const step = Math.min(SPEED * speedScale * dt, maxStep)
       const nx = p.x + dx * step
       const ny = p.y + dy * step
       if (!isTileBlocked(map, Math.floor(nx / TILE), Math.floor(p.y / TILE))) p.x = nx
@@ -256,11 +337,31 @@ export class WorldEngine {
     l.moving = p.moving
 
     this.updateRemotes(dt)
+    this.applyBubbles(performance.now())
 
     const cam = 1 - Math.exp(-CAMERA_SMOOTHING * dt)
     this.camera.x += (p.x - this.camera.x) * cam
     this.camera.y += (p.y - this.camera.y) * cam
     if (this.marker && (this.marker.age += dt) > 0.8) this.marker = null
+  }
+
+  /** Copy what people just said (WorldSession.bubbles) onto the characters that get drawn. */
+  private applyBubbles(now: number) {
+    const set = (c: Character) => {
+      const b = this.session.bubbles.get(c.id)
+      if (!b) {
+        c.speechBubble = null
+        return
+      }
+      if (now >= b.until) {
+        this.session.bubbles.delete(c.id)
+        c.speechBubble = null
+        return
+      }
+      c.speechBubble = { text: b.text, dm: b.dm, age: now - b.at, timer: b.until - now }
+    }
+    set(this.player)
+    for (const c of this.remote.values()) set(c)
   }
 
   private updateRemotes(dt: number) {
@@ -368,9 +469,11 @@ export class WorldEngine {
     items.sort((a, b) => a.sortY - b.sortY)
     for (const it of items) it.draw()
 
+    // zoomed out (a phone): grow the name tags and bubbles so they stay readable
+    const overlayScale = clamp(1 / zoom, 0.85, 1.5)
     for (const c of people) {
       ctx.globalAlpha = this.alphaFor(c)
-      drawCharacterOverlays(ctx, c, time)
+      drawCharacterOverlays(ctx, c, time, overlayScale)
     }
     ctx.globalAlpha = 1
   }

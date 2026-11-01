@@ -167,72 +167,147 @@ export function drawCharacter(
   g.restore();
 }
 
-export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Character, time: number) {
+const UI_FONT = "'Instrument Sans Variable', Inter, system-ui, sans-serif"
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+/** Overshoots a little before settling: the bubble "pops" into place. */
+const easeOutBack = (t: number) => {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
+}
+
+/** Greedy word wrap into at most `maxLines` lines, ending the last one with an ellipsis if text is left over. */
+function wrapLines(g: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number): string[] {
+  const words = text.split(' ')
+  const lines: string[] = []
+  let line = ''
+  const fits = (t: string) => g.measureText(t).width <= maxW
+  for (let word of words) {
+    // a single very long word (a URL, keyboard mash) is cut to fit rather than overflowing the bubble
+    while (!fits(word) && word.length > 1) {
+      let n = word.length - 1
+      while (n > 1 && !fits(word.slice(0, n))) n--
+      if (line) {
+        lines.push(line)
+        line = ''
+      }
+      lines.push(word.slice(0, n))
+      word = word.slice(n)
+    }
+    const next = line ? `${line} ${word}` : word
+    if (fits(next)) line = next
+    else {
+      if (line) lines.push(line)
+      line = word
+    }
+  }
+  if (line) lines.push(line)
+  if (lines.length <= maxLines) return lines
+  const kept = lines.slice(0, maxLines)
+  let last = kept[maxLines - 1]!
+  while (last.length > 1 && !fits(last + '…')) last = last.slice(0, -1)
+  kept[maxLines - 1] = last.trimEnd() + '…'
+  return kept
+}
+
+/**
+ * Name tag, speech bubble and reaction above a person. `scale` grows them when the camera is zoomed
+ * out (a phone shows the whole room small) so the text stays readable.
+ */
+export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Character, time: number, scale = 1) {
   g.save();
   g.translate(char.x, char.y);
+  g.scale(scale, scale);
 
   const tagText = char.name + (char.flair ? ' ' + char.flair : '');
-  g.font = '600 11px Inter, sans-serif';
+  g.font = `600 12px ${UI_FONT}`;
   const textWidth = g.measureText(tagText).width;
-  const pillW = textWidth + 24;
-  const pillH = 20;
+  const pillW = textWidth + 26;
+  const pillH = 22;
   const pillX = -pillW / 2;
-  const pillY = -49;
+  const pillY = -52;
 
-  g.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  g.fillStyle = 'rgba(12, 18, 38, 0.9)';
   g.beginPath();
   g.roundRect(pillX, pillY, pillW, pillH, 999);
   g.fill();
-  g.strokeStyle = char.isPlayer ? 'rgba(52, 211, 153, 0.7)' : 'rgba(255, 255, 255, 0.15)';
+  g.strokeStyle = char.isPlayer ? 'rgba(52, 211, 153, 0.75)' : 'rgba(255, 255, 255, 0.18)';
   g.lineWidth = 1;
   g.stroke();
 
   if (char.status === 'vibing') {
     g.font = '10px sans-serif';
-    g.fillText('🎧', pillX + 5, pillY + 13.5);
+    g.fillText('🎧', pillX + 5, pillY + 14.5);
   } else {
     g.fillStyle = char.status === 'busy' ? '#fbbf24' : '#34d399';
     g.beginPath();
-    g.arc(pillX + 10, pillY + pillH / 2, 3.5, 0, Math.PI * 2);
+    g.arc(pillX + 11, pillY + pillH / 2, 3.6, 0, Math.PI * 2);
     g.fill();
   }
 
   g.fillStyle = '#f8fafc';
-  g.font = '600 11px Inter, sans-serif';
+  g.font = `600 12px ${UI_FONT}`;
   g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.fillText(tagText, pillX + 18, pillY + pillH / 2 + 0.5);
+  g.fillText(tagText, pillX + 20, pillY + pillH / 2 + 0.5);
 
-  let topOffset = pillY - 6;
-  if (char.speechBubble && char.speechBubble.timer > 0) {
-    const msg = char.speechBubble.text;
-    g.font = '500 11px Inter, sans-serif';
-    const bw = Math.min(220, g.measureText(msg).width + 20);
-    const bh = 24;
-    const bx = -bw / 2;
-    const by = topOffset - bh;
+  let topOffset = pillY - 8;
+  const b = char.speechBubble;
+  if (b && b.timer > 0) {
+    const pop = easeOutBack(clamp01(b.age / 200));
+    const fade = clamp01(b.timer / 400);
+    const rise = (1 - fade) * 8;
 
-    g.fillStyle = '#ffffff';
+    g.save();
+    g.globalAlpha *= fade;
+    g.font = `500 13.5px ${UI_FONT}`;
+    const lines = wrapLines(g, b.text, 200, 3);
+    const lineH = 18;
+    const padX = 12;
+    const padY = 8;
+    const labelH = b.dm ? 15 : 0;
+    const widest = Math.max(...lines.map((l) => g.measureText(l).width), b.dm ? 44 : 0);
+    const w = Math.max(40, widest + padX * 2);
+    const h = lines.length * lineH + padY * 2 + labelH;
+    const tail = 7;
+    const by = topOffset - tail - h;
+
+    // grow out of the tail tip, so it reads as coming from the person
+    g.translate(0, topOffset - rise);
+    g.scale(pop, pop);
+    g.translate(0, -topOffset);
+
+    g.shadowColor = 'rgba(8, 12, 30, 0.35)';
+    g.shadowBlur = 12;
+    g.shadowOffsetY = 3;
+    g.fillStyle = b.dm ? '#3454f0' : '#ffffff';
     g.beginPath();
-    g.roundRect(bx, by, bw, bh, 10);
-    g.fill();
-    g.strokeStyle = '#cbd5e1';
-    g.lineWidth = 1.5;
-    g.stroke();
-
-    g.beginPath();
-    g.moveTo(-4, by + bh);
-    g.lineTo(4, by + bh);
-    g.lineTo(0, by + bh + 5);
+    g.roundRect(-w / 2, by, w, h, 14);
+    g.moveTo(-7, by + h - 0.5);
+    g.lineTo(7, by + h - 0.5);
+    g.lineTo(0, by + h + tail);
     g.closePath();
     g.fill();
+    g.shadowColor = 'transparent';
 
-    g.fillStyle = '#0f172a';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    const clipped = msg.length > 30 ? msg.slice(0, 29) + '…' : msg;
-    g.fillText(clipped, 0, by + bh / 2);
-    topOffset = by - 6;
+    let ty = by + padY;
+    if (b.dm) {
+      g.font = `600 10.5px ${UI_FONT}`;
+      g.fillStyle = 'rgba(255, 255, 255, 0.78)';
+      g.fillText('Private', 0, ty + 7);
+      ty += labelH;
+    }
+    g.font = `500 13.5px ${UI_FONT}`;
+    g.fillStyle = b.dm ? '#ffffff' : '#0f172a';
+    for (const line of lines) {
+      g.fillText(line, 0, ty + lineH / 2);
+      ty += lineH;
+    }
+    g.restore();
+    topOffset = by - 8;
   }
 
   if (char.reaction && char.reaction.timer > 0) {

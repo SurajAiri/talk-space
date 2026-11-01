@@ -107,7 +107,7 @@ export const ShieldIcon = (p: P) => (
 export const VolumeIcon = (p: P) => (
   <Icon {...p}>
     <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" />
-    <path d="M15.5 8.500a5 5 0 0 1 0 7M18.5 5.500a9 9 0 0 1 0 13" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
   </Icon>
 )
 export const XIcon = (p: P) => (
@@ -146,15 +146,116 @@ export const ChevronLeftIcon = (p: P) => (
 )
 export const MapIcon = (p: P) => (
   <Icon {...p}>
-    <path d="M9 4 3 6.5V20l6-2.500 6 2.500 6-2.500V4l-6 2.500L9 4Z" />
+    <path d="M9 4 3 6.5V20l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Z" />
     <path d="M9 4v13.5M15 6.5V20" />
   </Icon>
 )
 export const GoogleIcon = ({ size = 18 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path fill="#4285F4" d="M22.5 12.2c0-.8-.1-1.5-.2-2.200H12v4.200h5.900a5 5 0 0 1-2.200 3.300v2.700h3.5c2.100-1.900 3.300-4.700 3.300-8Z" />
-    <path fill="#34A853" d="M12 23c3 0 5.500-1 7.300-2.700l-3.5-2.700c-1 .7-2.200 1.100-3.800 1.100-2.900 0-5.400-2-6.300-4.600H2.100v2.800A11 11 0 0 0 12 23Z" />
-    <path fill="#FBBC05" d="M5.7 13.900a6.600 6.600 0 0 1 0-4.200V6.900H2.100a11 11 0 0 0 0 10l3.600-3Z" />
-    <path fill="#EA4335" d="M12 5.400c1.600 0 3.100.6 4.200 1.600l3.100-3.100A11 11 0 0 0 2.100 6.900l3.600 2.800C6.600 7.300 9.100 5.400 12 5.400Z" />
+    <path fill="#4285F4" d="M22.5 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-8Z" />
+    <path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.2 1.1-3.8 1.1-2.9 0-5.4-2-6.3-4.6H2.1v2.8A11 11 0 0 0 12 23Z" />
+    <path fill="#FBBC05" d="M5.7 13.9a6.6 6.6 0 0 1 0-4.2V6.9H2.1a11 11 0 0 0 0 10l3.6-3Z" />
+    <path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.6l3.1-3.1A11 11 0 0 0 2.1 6.9l3.6 2.8C6.6 7.3 9.1 5.4 12 5.4Z" />
   </svg>
+)
+
+export const ChatIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z" />
+  </Icon>
+)
+export const MaximizeIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+  </Icon>
+)
+export const MinimizeIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+  </Icon>
+)
+export const EyeIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+)
+export const EyeOffIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M9.9 4.2A10 10 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.2 3.2M6.6 6.6A16.5 16.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6" />
+    <path d="M14.1 14.1a3 3 0 1 1-4.2-4.2" />
+    <path d="m2 2 20 20" />
+  </Icon>
+)
+export const MailIcon = (p: P) => (
+  <Icon {...p}>
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </Icon>
+)
+export const AtSignIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+  </Icon>
+)
+export const AlertIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z" />
+    <path d="M12 9v4M12 17h.01" />
+  </Icon>
+)
+export const InfoIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 16v-4M12 8h.01" />
+  </Icon>
+)
+export const HashIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18" />
+  </Icon>
+)
+export const ChevronDownIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </Icon>
+)
+export const GripIcon = (p: P) => (
+  <Icon {...p} strokeWidth={3}>
+    <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" />
+  </Icon>
+)
+export const XCircleIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m15 9-6 6M9 9l6 6" />
+  </Icon>
+)
+export const CheckCircleIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+  </Icon>
+)
+export const RotateIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5" />
+  </Icon>
+)
+export const TypeIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 7V5h16v2M9 19h6M12 5v14" />
+  </Icon>
+)
+export const AlignLeftIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M17 10H3M21 6H3M21 14H3M17 18H3" />
+  </Icon>
+)
+export const KeyIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="7.5" cy="15.5" r="4.5" />
+    <path d="m10.7 12.3 9.3-9.3M16 7l3 3M14 9l2 2" />
+  </Icon>
 )

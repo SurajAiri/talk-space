@@ -3,10 +3,11 @@ import { toast } from 'sonner'
 import { REPORT_REASONS } from '../lib/rooms'
 import { useAuthStore } from '../store/auth.store'
 import { useRoomStore } from '../store/room.store'
-import { BanIcon, FlagIcon, XIcon } from './Icons'
+import { TextArea } from './form/fields'
+import { BanIcon, ChatIcon, FlagIcon, XIcon } from './Icons'
 
 /** Block / report / (host) remove, for one other person in the room. */
-export default function PeerActions({ peerId, name }: { peerId: string; name: string }) {
+export default function PeerActions({ peerId, name, onMessage }: { peerId: string; name: string; onMessage?: () => void }) {
   const selfId = useAuthStore((s) => s.user?.id)
   const hostId = useRoomStore((s) => s.room?.createdBy)
   const isBlocked = useRoomStore((s) => Boolean(s.blocked[peerId]))
@@ -49,6 +50,17 @@ export default function PeerActions({ peerId, name }: { peerId: string; name: st
   return (
     <>
       <div className="peer-actions">
+        {onMessage && !isBlocked && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon btn-small"
+            aria-label={`Message ${name} privately`}
+            title="Message privately"
+            onClick={onMessage}
+          >
+            <ChatIcon size={16} />
+          </button>
+        )}
         <button
           type="button"
           className="btn btn-ghost btn-icon btn-small"
@@ -83,20 +95,21 @@ export default function PeerActions({ peerId, name }: { peerId: string; name: st
       </div>
       {reporting && (
         <div className="peer-report" ref={reportRef}>
-          <select aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)}>
+          <div className="reasons" role="radiogroup" aria-label="Reason">
             {REPORT_REASONS.map((r) => (
-              <option key={r.value} value={r.value}>
+              <button
+                key={r.value}
+                type="button"
+                role="radio"
+                aria-checked={reason === r.value}
+                className={reason === r.value ? 'reason is-on' : 'reason'}
+                onClick={() => setReason(r.value)}
+              >
                 {r.label}
-              </option>
+              </button>
             ))}
-          </select>
-          <input
-            aria-label="Details (optional)"
-            placeholder="Details (optional)"
-            maxLength={500}
-            value={details}
-            onChange={(e) => setDetails(e.target.value)}
-          />
+          </div>
+          <TextArea label="Details" optional rows={2} maxLength={500} value={details} onValueChange={setDetails} />
           <p className="hint">Their latest message here is attached so a moderator has context.</p>
           <div className="peer-report-actions">
             <button type="button" className="btn btn-ghost btn-small" onClick={() => setReporting(false)}>

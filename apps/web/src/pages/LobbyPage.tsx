@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router'
 import AppHeader from '../components/AppHeader'
 import CreateRoomDialog from '../components/CreateRoomDialog'
 import JoinPrivateForm from '../components/JoinPrivateForm'
-import { LockIcon, PlusIcon, SearchIcon, VolumeIcon } from '../components/Icons'
+import { SelectField, Switch, TextField } from '../components/form/fields'
+import { GlobeIcon, HashIcon, LockIcon, PlusIcon, SearchIcon, VolumeIcon } from '../components/Icons'
 import { LogoMark } from '../components/Logo'
 import RoomCard from '../components/RoomCard'
 import { useDebounced } from '../hooks/useDebounced'
@@ -48,11 +49,6 @@ export default function LobbyPage() {
     }
   }, [applied])
 
-  const set =
-    (key: 'q' | 'language' | 'purpose' | 'tags') =>
-    (e: { target: { value: string } }) =>
-      setFilters((f) => ({ ...f, [key]: e.target.value }))
-
   const filtering = Boolean(
     filters.q || filters.language || filters.purpose || filters.tags || filters.hasSpace,
   )
@@ -83,47 +79,57 @@ export default function LobbyPage() {
         <div className="lobby">
           <section className="lobby-main" aria-labelledby="public-rooms">
             <div className="toolbar" role="search">
-              <label className="search">
-                <SearchIcon size={17} />
-                <input
-                  type="search"
-                  aria-label="Search rooms"
-                  placeholder="Search by title, description or tag"
-                  value={filters.q}
-                  onChange={set('q')}
-                />
-              </label>
-              <select aria-label="Language" value={filters.language} onChange={set('language')}>
+              <TextField
+                className="search"
+                label="Search rooms"
+                hideLabel
+                type="search"
+                icon={<SearchIcon size={17} />}
+                clearable
+                placeholder="Search by title, description or tag"
+                value={filters.q}
+                onValueChange={(v) => setFilters((f) => ({ ...f, q: v }))}
+              />
+              <SelectField
+                label="Language"
+                hideLabel
+                icon={<GlobeIcon size={17} />}
+                value={filters.language}
+                onValueChange={(v) => setFilters((f) => ({ ...f, language: v }))}
+              >
                 <option value="">Any language</option>
                 {config?.languages.map((l) => (
                   <option key={l.value} value={l.value}>
                     {l.label}
                   </option>
                 ))}
-              </select>
-              <select aria-label="Purpose" value={filters.purpose} onChange={set('purpose')}>
+              </SelectField>
+              <SelectField
+                label="Purpose"
+                hideLabel
+                value={filters.purpose}
+                onValueChange={(v) => setFilters((f) => ({ ...f, purpose: v }))}
+              >
                 <option value="">Any purpose</option>
                 {config?.purposes.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
                   </option>
                 ))}
-              </select>
-              <input
+              </SelectField>
+              <TextField
                 className="tags-input"
-                aria-label="Filter by tags"
+                label="Filter by tags"
+                hideLabel
+                icon={<HashIcon size={17} />}
                 placeholder="Tags: rust, go"
+                autoCapitalize="none"
                 value={filters.tags}
-                onChange={set('tags')}
+                onValueChange={(v) => setFilters((f) => ({ ...f, tags: v }))}
               />
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={filters.hasSpace}
-                  onChange={(e) => setFilters((f) => ({ ...f, hasSpace: e.target.checked }))}
-                />
+              <Switch checked={filters.hasSpace} onChange={(v) => setFilters((f) => ({ ...f, hasSpace: v }))}>
                 Has space
-              </label>
+              </Switch>
             </div>
 
             {loadError && (
@@ -195,7 +201,7 @@ export default function LobbyPage() {
                 </li>
                 <li>
                   <span aria-hidden="true">●</span>
-                  <span>Chat reaches the whole room.</span>
+                  <span>Chat goes to everyone, or privately to just one person.</span>
                 </li>
               </ul>
             </div>

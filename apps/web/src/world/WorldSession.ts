@@ -33,6 +33,18 @@ const AUDIO_OFF_DELAY_MS = 1000
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
+/** A line of chat shown above someone's head for a few seconds. Times are performance.now() ms. */
+export interface Bubble {
+  text: string
+  /** a direct message: drawn differently so nobody mistakes it for something the whole room saw */
+  dm: boolean
+  at: number
+  until: number
+}
+const BUBBLE_MIN_MS = 3500
+const BUBBLE_MAX_MS = 8000
+const BUBBLE_MS_PER_CHAR = 55 // roughly reading speed, plus a base for noticing it
+
 /**
  * Everything about the room's world that must keep working even when nothing is
  * being drawn (hidden tab, canvas unmounted): who is where, who can hear whom.
@@ -48,6 +60,10 @@ export class WorldSession {
   /** peerId -> last position received (tile units, already clamped) */
   readonly remotes = new Map<string, PositionState>()
   readonly local: PositionState
+  /** personId -> what they just said (newest only). The engine draws it; chat feeds it. */
+  readonly bubbles = new Map<string, Bubble>()
+  /** On-screen joystick, -1..1 on each axis (0,0 = released). Written by the UI, read by the engine. */
+  readonly joystick = { x: 0, y: 0 }
 
   private send: ((msg: PosMessage) => void) | null = null
   private audioGate: ((id: string, on: boolean) => void) | null = null
@@ -128,7 +144,21 @@ export class WorldSession {
     this.updateHearing() // set the right volume now, not 100 ms from now
   }
 
+  setJoystick(x: number, y: number) {
+    this.joystick.x = x
+    this.joystick.y = y
+  }
+
+  /** Show `text` above `id`'s head. A newer line replaces the older one. */
+  say(id: string, text: string, dm = false, now = performance.now()) {
+    const clean = text.replace(/\s+/g, ' ').trim()
+    if (!clean) return
+    const ms = Math.min(BUBBLE_MAX_MS, Math.max(BUBBLE_MIN_MS, 2000 + clean.length * BUBBLE_MS_PER_CHAR))
+    this.bubbles.set(id, { text: clean, dm, at: now, until: now + ms })
+  }
+
   onPeerLeft(id: string) {
+    this.bubbles.delete(id)
     this.remotes.delete(id)
     this.remoteSeenAt.delete(id)
     this.gated.delete(id)
@@ -149,6 +179,7 @@ export class WorldSession {
     this.send = null
     this.listeners.clear()
     this.remotes.clear()
+    this.bubbles.clear()
     this.mixer.close()
   }
 

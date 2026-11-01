@@ -14,7 +14,8 @@ export interface SignalData {
 
 /** Everything that travels peer-to-peer over the data channel. */
 export type P2PMessage =
-  | { type: 'chat'; id: string; text: string; ts: number }
+  /** `dm`: sent to this one person only (it is only ever written to their link). */
+  | { type: 'chat'; id: string; text: string; ts: number; dm?: true }
   | { type: 'presence'; muted: boolean }
   | PosMessage
 
@@ -73,7 +74,9 @@ export function parseP2PMessage(raw: unknown, chatMax: number): P2PMessage | nul
     m.text.length <= chatMax &&
     typeof m.ts === 'number'
   ) {
-    return { type: 'chat', id: m.id, text: m.text, ts: m.ts }
+    return m.dm === true
+      ? { type: 'chat', id: m.id, text: m.text, ts: m.ts, dm: true }
+      : { type: 'chat', id: m.id, text: m.text, ts: m.ts }
   }
   return null
 }

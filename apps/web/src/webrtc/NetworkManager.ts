@@ -322,6 +322,16 @@ export class NetworkManager {
     return reached
   }
 
+  /**
+   * Sends to ONE connected peer (direct messages). False when there is no open link to them, or
+   * when they are blocked: a blocked person gets no chat from us, direct or not.
+   */
+  sendTo(peerId: string, msg: P2PMessage): boolean {
+    if (msg.type === 'chat' && this.blocked.has(peerId)) return false
+    const link = this.links.get(peerId)
+    return link ? link.send(JSON.stringify(msg)) : false
+  }
+
   /** Best-effort position broadcast on the unreliable channel; returns how many peers it reached. */
   sendPosition(msg: PosMessage): number {
     const raw = JSON.stringify(msg)

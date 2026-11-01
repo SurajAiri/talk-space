@@ -3,7 +3,6 @@ import { useAuthStore } from '../store/auth.store'
 import { useRoomStore } from '../store/room.store'
 import Avatar from './Avatar'
 import PeerActions from './PeerActions'
-import RemoteAudio from './RemoteAudio'
 
 const LINK_LABEL: Record<LinkState, string> = {
   connecting: 'Connecting…',
@@ -20,13 +19,12 @@ const LINK_TONE: Record<LinkState, 'live' | 'warn' | 'bad' | 'idle'> = {
   closed: 'bad',
 }
 
-export default function ParticipantList() {
+/** Everyone in the room, with the per-person actions. (Voice playback lives in RemoteAudioHost.) */
+export default function ParticipantList({ onMessage }: { onMessage: (peerId: string) => void }) {
   const me = useAuthStore((s) => s.user)
   const peers = useRoomStore((s) => s.peers)
-  const muted = useRoomStore((s) => s.muted)
   const mic = useRoomStore((s) => s.mic)
-  // In a world, the ProximityMixer plays voices (with per-person volume); a plain <audio> here would double them.
-  const hasWorld = useRoomStore((s) => s.world !== null)
+  const muted = useRoomStore((s) => s.muted)
   const blocked = useRoomStore((s) => s.blocked)
   const list = Object.values(peers)
 
@@ -36,27 +34,30 @@ export default function ParticipantList() {
         <Avatar name={me?.name ?? 'You'} status="live" />
         <div className="person-name">
           {me?.name ?? 'You'} <span className="muted-inline">(you)</span>
+          <div className="person-sub">
+            <span className={mic === 'on' && !muted ? 'person-mic is-live' : 'person-mic'}>
+              {mic === 'on' ? (muted ? 'Muted' : 'Live') : 'Listening'}
+            </span>
+          </div>
         </div>
-        <span className={mic === 'on' && !muted ? 'person-mic is-live' : 'person-mic'}>
-          {mic === 'on' ? (muted ? 'Muted' : 'Live') : 'Listening'}
-        </span>
       </li>
+      {list.length === 0 && <li className="people-empty">Nobody else is here yet. Share the room ID to invite people.</li>}
       {list.map((p) => {
         const isBlocked = Boolean(blocked[p.id])
         return (
           <li className="person" key={p.id}>
             <Avatar name={p.name} status={LINK_TONE[p.link]} />
             <div className="person-name">
-              {p.name} <span className="muted-inline">@{p.username}</span>
-              {p.link !== 'connected' && (
-                <div className={`person-sub ${LINK_TONE[p.link] === 'bad' ? 'is-bad' : 'is-warn'}`}>{LINK_LABEL[p.link]}</div>
-              )}
+              {p.name}
+              <div className="person-sub">
+                <span>@{p.username}</span>
+                <span className={isBlocked ? 'person-mic is-bad' : !p.muted ? 'person-mic is-live' : 'person-mic'}>
+                  {isBlocked ? 'Blocked' : p.muted ? 'Muted' : 'Live'}
+                </span>
+                {p.link !== 'connected' && <span className={LINK_TONE[p.link] === 'bad' ? 'is-bad' : 'is-warn'}>{LINK_LABEL[p.link]}</span>}
+              </div>
             </div>
-            <span className={isBlocked ? 'person-mic is-bad' : !p.muted ? 'person-mic is-live' : 'person-mic'}>
-              {isBlocked ? 'Blocked' : p.muted ? 'Muted' : 'Live'}
-            </span>
-            {!hasWorld && <RemoteAudio stream={isBlocked ? null : p.stream} />}
-            <PeerActions peerId={p.id} name={p.name} />
+            <PeerActions peerId={p.id} name={p.name} onMessage={() => onMessage(p.id)} />
           </li>
         )
       })}

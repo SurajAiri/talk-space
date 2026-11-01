@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { roomsApi, type RoomConfig } from '../lib/rooms'
 import { listWorldMaps, type RoomMapKey } from '../world/maps'
+import { normalizeTag, validateTag } from '../lib/validation'
+import { SelectField, TagInput, TextArea, TextField } from './form/fields'
 import { CheckIcon, GlobeIcon, LockIcon, XIcon } from './Icons'
 import MapThumb from './MapThumb'
 
@@ -17,12 +19,13 @@ const maps = listWorldMaps()
 export default function CreateRoomDialog({ config, onClose }: Props) {
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
+  const [attempted, setAttempted] = useState(false)
   const [form, setForm] = useState({
     title: '',
     shortDescription: '',
     language: config.languages[0]?.value ?? 'en',
     purpose: config.purposes[0]?.value ?? 'misc',
-    tags: '',
+    tags: [] as string[],
     map: (maps[0]?.key ?? '') as RoomMapKey,
     visibility: 'public' as 'public' | 'private',
   })
@@ -33,22 +36,22 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const set =
-    (key: keyof typeof form) =>
-    (e: { target: { value: string } }) =>
-      setForm((f) => ({ ...f, [key]: e.target.value }))
+  const set = (key: 'title' | 'shortDescription' | 'language' | 'purpose') => (value: string) =>
+    setForm((f) => ({ ...f, [key]: value }))
+
+  const titleError =
+    form.title.trim().length < config.title.min ? `Give it a title of at least ${config.title.min} characters` : null
 
   async function onSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
+    setAttempted(true)
+    if (titleError) {
+      document.querySelector<HTMLElement>('.modal [aria-invalid="true"]')?.focus()
+      return
+    }
     setSubmitting(true)
     try {
-      const room = await roomsApi.create({
-        ...form,
-        tags: form.tags
-          .split(',')
-          .map((t) => t.trim().replace(/^#/, ''))
-          .filter(Boolean),
-      })
+      const room = await roomsApi.create({ ...form, title: form.title.trim() })
       // the join code travels in router state, not in the URL
       navigate(`/room/${room.id}`, { state: { joinCode: room.joinCode } })
     } catch (err) {
@@ -66,56 +69,54 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
             <XIcon size={18} />
           </button>
         </div>
-        <form className="modal-form" onSubmit={onSubmit}>
+        <form className="modal-form" onSubmit={onSubmit} noValidate>
           <div className="modal-body">
-            <label className="field">
-              Title
-              <input
-                autoFocus
-                required
-                minLength={config.title.min}
-                maxLength={config.title.max}
-                value={form.title}
-                onChange={set('title')}
-                placeholder="e.g. Rust lifetimes, explained badly"
-              />
-            </label>
-            <label className="field">
-              Short description
-              <input
-                maxLength={config.shortDescriptionMax}
-                value={form.shortDescription}
-                onChange={set('shortDescription')}
-                placeholder="What will you talk about?"
-              />
-            </label>
+            <TextField
+              label="Title"
+              autoFocus
+              counter
+              maxLength={config.title.max}
+              value={form.title}
+              onValueChange={set('title')}
+              error={titleError}
+              showError={attempted}
+              placeholder="e.g. Rust lifetimes, explained badly"
+            />
+            <TextArea
+              label="Short description"
+              optional
+              rows={2}
+              maxLength={config.shortDescriptionMax}
+              value={form.shortDescription}
+              onValueChange={set('shortDescription')}
+              placeholder="What will you talk about?"
+            />
             <div className="row">
-              <label className="field">
-                Language
-                <select value={form.language} onChange={set('language')}>
-                  {config.languages.map((l) => (
-                    <option key={l.value} value={l.value}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Purpose
-                <select value={form.purpose} onChange={set('purpose')}>
-                  {config.purposes.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SelectField label="Language" icon={<GlobeIcon size={17} />} value={form.language} onValueChange={set('language')}>
+                {config.languages.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Purpose" value={form.purpose} onValueChange={set('purpose')}>
+                {config.purposes.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </SelectField>
             </div>
-            <label className="field">
-              Tags
-              <input value={form.tags} onChange={set('tags')} placeholder="rust, systems, compilers" />
-              <span className="field-hint">Separate with commas. Up to {config.tags.max}.</span>
-            </label>
+            <TagInput
+              label="Tags"
+              optional
+              tags={form.tags}
+              onTagsChange={(tags) => setForm((f) => ({ ...f, tags }))}
+              normalize={normalizeTag}
+              validate={(t) => validateTag(t, config.tags.minLength, config.tags.maxLength)}
+              max={config.tags.max}
+              placeholder="rust, systems, compilers"
+            />
 
             <fieldset className="field">
               <legend className="legend">Map</legend>
@@ -172,6 +173,7 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
               Cancel
             </button>
             <button type="submit" className="btn" disabled={submitting}>
+              {submitting && <span className="spinner" aria-hidden="true" />}
               {submitting ? 'Creating…' : 'Create room'}
             </button>
           </div>

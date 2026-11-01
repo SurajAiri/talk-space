@@ -399,3 +399,57 @@ test('voice is sent only to people who can hear us, stops after a delay out of r
     w.close()
   }
 })
+
+// ---------------------------------------------------------------- direct messages + speech bubbles
+
+test('a direct message keeps its flag; anything but a literal true is treated as an ordinary message', () => {
+  const dm = { ...chat(1), dm: true }
+  assert.deepEqual(parseP2PMessage(JSON.stringify(dm), 100), dm)
+  assert.deepEqual(parseP2PMessage(JSON.stringify({ ...chat(1), dm: 'yes' }), 100), chat(1))
+  assert.deepEqual(parseP2PMessage(JSON.stringify({ ...chat(1), dm: false }), 100), chat(1))
+})
+
+test('sendTo writes to exactly one link, and never to someone we blocked or have no link with', () => {
+  const s = setup()
+  s.mgr.connect('p1', true)
+  s.mgr.connect('p2', true)
+  const [p1, p2] = [s.latest('p1'), s.latest('p2')]
+  const dm: P2PMessage = { type: 'chat', id: 'd1', text: 'psst', ts: 1, dm: true }
+
+  assert.equal(s.mgr.sendTo('p1', dm), true)
+  assert.equal(p1.sent.filter((x) => x.includes('"psst"')).length, 1)
+  assert.equal(p2.sent.filter((x) => x.includes('"psst"')).length, 0, 'the other person must not get it')
+  assert.ok(JSON.parse(p1.sent.find((x) => x.includes('psst'))!).dm === true, 'the recipient is told it was private')
+
+  assert.equal(s.mgr.sendTo('nobody', dm), false)
+  s.mgr.setBlocked('p2', true)
+  assert.equal(s.mgr.sendTo('p2', dm), false)
+  assert.equal(p2.sent.filter((x) => x.includes('"psst"')).length, 0)
+})
+
+test('speech bubbles: last for longer when the line is longer, are replaced by newer ones, and clean up', () => {
+  const s = new WorldSession({ map, selfId: 'me' })
+  try {
+    s.say('a', '  hi  ', false, 1000)
+    const short = s.bubbles.get('a')!
+    assert.equal(short.text, 'hi')
+    assert.ok(short.until - short.at >= 3500, 'even a one-word line stays long enough to notice')
+
+    s.say('a', 'word '.repeat(40), true, 2000)
+    const long = s.bubbles.get('a')!
+    assert.equal(long.dm, true)
+    assert.ok(long.until - long.at > short.until - short.at, 'longer text is shown for longer')
+    assert.ok(long.until - long.at <= 8000, 'but never forever')
+
+    s.say('a', 'line one\n\n   line   two', false, 3000)
+    assert.equal(s.bubbles.get('a')!.text, 'line one line two', 'whitespace and newlines are flattened')
+
+    s.say('a', '   ', false, 4000)
+    assert.equal(s.bubbles.get('a')!.text, 'line one line two', 'blank input is ignored, not shown')
+
+    s.onPeerLeft('a')
+    assert.equal(s.bubbles.has('a'), false)
+  } finally {
+    s.close()
+  }
+})
