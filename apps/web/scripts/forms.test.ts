@@ -46,3 +46,37 @@ test('tags are normalised to what the API accepts', () => {
   assert.equal(validateTag('a', 2, 20), 'Tags need at least 2 characters')
   assert.equal(validateTag('ok', 2, 20), null)
 })
+
+// ---------------------------------------------------------------- speech bubbles near the screen edge
+import { bubbleShift, bubbleVisible } from '../src/world/render/character.ts'
+
+test('a bubble in the middle of the screen is left alone; one at an edge slides inward', () => {
+  const screen = { minX: -400, maxX: 400 } // the speaker is at the centre of an 800-wide view
+  assert.equal(bubbleShift(200, 1, screen), 0)
+  assert.equal(bubbleShift(200, 1, undefined), 0)
+
+  const nearRight = { minX: -740, maxX: 60 } // 60 units from the right edge, bubble is 200 wide (100 each side)
+  assert.equal(bubbleShift(200, 1, nearRight), -48, 'pulled left so its right edge sits 8 from the screen edge')
+  const nearLeft = { minX: -60, maxX: 740 }
+  assert.equal(bubbleShift(200, 1, nearLeft), 48)
+})
+
+test('the slide never goes so far that the tail would be outside the bubble', () => {
+  const speakerAtTheEdge = { minX: -900, maxX: 0 } // standing right on the edge of the screen
+  const shift = bubbleShift(200, 1, speakerAtTheEdge)
+  assert.equal(shift, -(100 - 18), 'limited to leave room for the tail')
+  assert.ok(Math.abs(shift) < 100)
+})
+
+test('the zoom-out scale is accounted for, so the bubble is measured in its own (scaled) units', () => {
+  // drawn 1.5x bigger, so each unit of its width covers more of the screen
+  assert.equal(bubbleShift(200, 1.5, { minX: -600, maxX: 90 }), bubbleShift(200, 1, { minX: -400, maxX: 60 }))
+})
+
+test('someone who is off screen gets no bubble (the message tile covers them), someone on screen does', () => {
+  assert.equal(bubbleVisible({ minX: -300, maxX: 300 }), true)
+  assert.equal(bubbleVisible(undefined), true)
+  assert.equal(bubbleVisible({ minX: -900, maxX: -20 }), false, 'off the left edge')
+  assert.equal(bubbleVisible({ minX: 40, maxX: 700 }), false, 'off the right edge')
+  assert.equal(bubbleVisible({ minX: -900, maxX: 2 }), false, 'standing right on the edge: still just a fragment')
+})

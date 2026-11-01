@@ -11,13 +11,11 @@ import FloatPanel from '../components/room/FloatPanel'
 import HearingChip from '../components/room/HearingChip'
 import Joystick from '../components/room/Joystick'
 import MessageTiles from '../components/room/MessageTiles'
-import MicDock from '../components/room/MicDock'
 import RoomTopBar from '../components/room/RoomTopBar'
-import RotatePrompt from '../components/room/RotatePrompt'
 import WorldView from '../components/WorldView'
 import { useRoomConfig } from '../hooks/useRoomConfig'
-import { useCoarsePointer, usePortrait, useShortScreen } from '../hooks/useMedia'
-import { enterImmersive, exitImmersive, fullscreenSupported, useIsFullscreen } from '../lib/fullscreen'
+import { useCoarsePointer, useShortScreen } from '../hooks/useMedia'
+import { enterFullscreen, exitFullscreen, fullscreenSupported, useIsFullscreen } from '../lib/fullscreen'
 import { labelFor, roomsApi, type RoomPreview } from '../lib/rooms'
 import { useRoomStore } from '../store/room.store'
 
@@ -37,7 +35,7 @@ export default function RoomPage() {
   useEffect(() => {
     return () => {
       void useRoomStore.getState().leave()
-      void exitImmersive()
+      void exitFullscreen()
     }
   }, [])
 
@@ -98,7 +96,6 @@ function PreJoin({ roomId }: { roomId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [hideIp, setHideIp] = useState(false)
   const joining = status === 'joining'
-  const coarse = useCoarsePointer()
 
   useEffect(() => {
     if (status !== 'idle') return
@@ -121,8 +118,6 @@ function PreJoin({ roomId }: { roomId: string }) {
 
   async function onJoin(withMic: boolean) {
     setError(null)
-    // phones: full screen + landscape need this click, so ask before the (slow) join starts
-    if (coarse) void enterImmersive(true)
     const res = await join(roomId, { joinCode: code || undefined, withMic, hideIp })
     if (!res.ok && res.code !== 'CANCELLED') setError(res.message)
   }
@@ -260,7 +255,6 @@ function InRoom() {
   const leave = useRoomStore((s) => s.leave)
 
   const coarse = useCoarsePointer()
-  const portrait = usePortrait()
   const short = useShortScreen()
   const fullscreen = useIsFullscreen()
 
@@ -293,13 +287,13 @@ function InRoom() {
 
   async function onLeave() {
     await leave()
-    void exitImmersive()
+    void exitFullscreen()
     navigate('/home', { replace: true })
   }
 
   async function toggleFullscreen() {
-    if (fullscreen) await exitImmersive()
-    else await enterImmersive(coarse)
+    if (fullscreen) await exitFullscreen()
+    else await enterFullscreen()
   }
 
   const map = world?.map
@@ -326,6 +320,7 @@ function InRoom() {
         peopleOpen={peopleOpen}
         fullscreen={fullscreen}
         canFullscreen={fullscreenSupported()}
+        coarse={coarse}
         onChat={() => (chatOpen ? setChatOpen(false) : openChat())}
         onPeople={() => (peopleOpen ? setPeopleOpen(false) : openPeople())}
         onFullscreen={() => void toggleFullscreen()}
@@ -347,7 +342,6 @@ function InRoom() {
       <MoveHint coarse={coarse} />
 
       <MessageTiles messages={messages} seenId={seenId} chatOpen={chatOpen} blocked={blocked} onOpen={(from, dm) => openChat(dm ? from : undefined)} />
-      <MicDock />
 
       {chatOpen && (
         <FloatPanel id="chat" title="Chat" width={short ? 300 : 360} height={540} anchor="right" onClose={() => setChatOpen(false)}>
@@ -377,7 +371,6 @@ function InRoom() {
         </FloatPanel>
       )}
 
-      {coarse && portrait && <RotatePrompt onLeave={() => void onLeave()} />}
     </div>
   )
 }
@@ -386,10 +379,11 @@ function InRoom() {
 function RemoteAudioHost() {
   const peers = useRoomStore((s) => s.peers)
   const blocked = useRoomStore((s) => s.blocked)
+  const deafened = useRoomStore((s) => s.deafened)
   return (
     <>
       {Object.values(peers).map((p) => (
-        <RemoteAudio key={p.id} stream={blocked[p.id] ? null : p.stream} />
+        <RemoteAudio key={p.id} stream={blocked[p.id] ? null : p.stream} silenced={deafened} />
       ))}
     </>
   )

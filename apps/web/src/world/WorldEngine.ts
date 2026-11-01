@@ -16,8 +16,9 @@ const CAMERA_SMOOTHING = 9
 const SNAP_DISTANCE = 6 * TILE // farther than this (join, lag spike): jump instead of gliding across the map
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 2
-/** Fit about this many tiles top to bottom, so a phone held sideways and a big monitor both show a comfortable slice. */
+/** Aim to show about this many tiles top to bottom AND this many across, whichever is tighter: a phone held either way and a big monitor all get a comfortable slice. */
 const FIT_TILES_TALL = 12
+const FIT_TILES_WIDE = 9
 const STICK_DEADZONE = 0.16
 const TAP_MAX_MS = 600
 const TAP_MAX_MOVE = 10 // px: a finger that travels further than this is panning/pinching, not tapping
@@ -241,7 +242,7 @@ export class WorldEngine {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2) // 3x phones would 9x the fill cost for no visible gain
     this.canvas.width = Math.round(this.cssW * this.dpr)
     this.canvas.height = Math.round(this.cssH * this.dpr)
-    if (!this.userZoomed) this.zoom = clamp(this.cssH / (FIT_TILES_TALL * TILE), 0.7, 1.3)
+    if (!this.userZoomed) this.zoom = clamp(Math.min(this.cssH / (FIT_TILES_TALL * TILE), this.cssW / (FIT_TILES_WIDE * TILE)), 0.7, 1.3)
   }
 
   // ---------- loop ----------
@@ -471,9 +472,11 @@ export class WorldEngine {
 
     // zoomed out (a phone): grow the name tags and bubbles so they stay readable
     const overlayScale = clamp(1 / zoom, 0.85, 1.5)
+    const halfWide = this.cssW / (2 * zoom) // world units from the camera centre to the screen edge
     for (const c of people) {
       ctx.globalAlpha = this.alphaFor(c)
-      drawCharacterOverlays(ctx, c, time, overlayScale)
+      // bubbles slide sideways to stay readable when someone stands at the edge of the screen
+      drawCharacterOverlays(ctx, c, time, overlayScale, { minX: this.view.x - halfWide - c.x, maxX: this.view.x + halfWide - c.x })
     }
     ctx.globalAlpha = 1
   }

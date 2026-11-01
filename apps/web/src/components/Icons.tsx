@@ -110,6 +110,12 @@ export const VolumeIcon = (p: P) => (
     <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
   </Icon>
 )
+export const VolumeOffIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" />
+    <path d="m22 9-6 6M16 9l6 6" />
+  </Icon>
+)
 export const XIcon = (p: P) => (
   <Icon {...p}>
     <path d="M18 6 6 18M6 6l12 12" />

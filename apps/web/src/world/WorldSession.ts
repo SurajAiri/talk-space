@@ -144,6 +144,11 @@ export class WorldSession {
     this.updateHearing() // set the right volume now, not 100 ms from now
   }
 
+  /** Stop (or resume) hearing everyone. The voices keep flowing, they are just not played. */
+  setDeafened(deafened: boolean) {
+    this.mixer.setDeafened(deafened)
+  }
+
   setJoystick(x: number, y: number) {
     this.joystick.x = x
     this.joystick.y = y

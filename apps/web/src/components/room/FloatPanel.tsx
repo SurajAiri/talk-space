@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useNarrowScreen } from '../../hooks/useMedia'
 import { GripIcon, XIcon } from '../Icons'
 
 interface Pos {
@@ -30,9 +31,14 @@ function save(id: string, p: Pos) {
   }
 }
 
+const SHEET_DISMISS_PX = 90
+
 /**
  * A window that floats over the map. Drag it by its title bar (mouse or finger); where you leave it
  * is remembered. It always keeps its title bar on screen, so it can never be lost.
+ *
+ * On a phone-width screen a floating window is the wrong shape (small, and the thumb can't reach it),
+ * so it becomes a bottom sheet instead: full width, anchored to the bottom, swipe the handle down to close.
  */
 export default function FloatPanel({
   id,
@@ -74,6 +80,8 @@ export default function FloatPanel({
   })
   const [z, setZ] = useState(() => ++zCounter)
   const drag = useRef<{ dx: number; dy: number; id: number } | null>(null)
+  const sheet = useNarrowScreen()
+  const [sheetDy, setSheetDy] = useState(0) // how far the sheet is being pulled down
 
   const clamp = useCallback((p: Pos): Pos => {
     const w = ref.current?.offsetWidth ?? width
@@ -103,18 +111,69 @@ export default function FloatPanel({
   function onDown(e: ReactPointerEvent<HTMLElement>) {
     setZ(++zCounter)
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
-    drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, id: e.pointerId }
+    drag.current = { dx: e.clientX - pos.x, dy: sheet ? e.clientY : e.clientY - pos.y, id: e.pointerId }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   function onMove(e: ReactPointerEvent<HTMLElement>) {
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
+    if (sheet) return setSheetDy(Math.max(0, e.clientY - d.dy)) // only downwards
     setPos(clamp({ x: e.clientX - d.dx, y: e.clientY - d.dy }))
   }
   function onUp(e: ReactPointerEvent<HTMLElement>) {
     if (drag.current?.id !== e.pointerId) return
     drag.current = null
+    if (sheet) {
+      const far = sheetDy > SHEET_DISMISS_PX
+      setSheetDy(0)
+      if (far) onClose()
+      return
+    }
     save(id, pos)
+  }
+
+  const head = (
+    <header className="float-head" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      {sheet ? (
+        <span className="sheet-handle" aria-hidden="true" />
+      ) : (
+        <span className="float-grip" aria-hidden="true">
+          <GripIcon size={16} />
+        </span>
+      )}
+      <h2 className="float-title">
+        {icon}
+        {title}
+      </h2>
+      <span className="float-extra">{headerExtra}</span>
+      <button type="button" className="btn btn-ghost btn-icon" aria-label={`Close ${title}`} onClick={onClose}>
+        <XIcon size={18} />
+      </button>
+    </header>
+  )
+
+  if (sheet) {
+    return (
+      <>
+        {/* tapping the map behind a sheet closes it, like every sheet people have used */}
+        <div className="sheet-scrim" onPointerDown={onClose} aria-hidden="true" />
+        <section
+          ref={ref}
+          className="float is-sheet"
+          role="dialog"
+          aria-label={title}
+          style={{
+            [fit ? 'maxHeight' : 'height']: `min(${height}px, ${fit ? 62 : 70}dvh)`,
+            transform: sheetDy ? `translateY(${sheetDy}px)` : undefined,
+            transition: sheetDy > 0 ? 'none' : undefined,
+            zIndex: z,
+          }}
+        >
+          {head}
+          <div className="float-body">{children}</div>
+        </section>
+      </>
+    )
   }
 
   return (
@@ -131,19 +190,7 @@ export default function FloatPanel({
       }}
       onPointerDownCapture={() => setZ(++zCounter)}
     >
-      <header className="float-head" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-        <span className="float-grip" aria-hidden="true">
-          <GripIcon size={16} />
-        </span>
-        <h2 className="float-title">
-          {icon}
-          {title}
-        </h2>
-        <span className="float-extra">{headerExtra}</span>
-        <button type="button" className="btn btn-ghost btn-icon btn-small" aria-label={`Close ${title}`} onClick={onClose}>
-          <XIcon size={16} />
-        </button>
-      </header>
+      {head}
       <div className="float-body">{children}</div>
     </section>
   )

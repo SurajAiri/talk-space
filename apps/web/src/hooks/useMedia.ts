@@ -15,6 +15,7 @@ export function useMediaQuery(query: string): boolean {
 
 /** A finger rather than a mouse: show the joystick, use bigger targets. */
 export const useCoarsePointer = () => useMediaQuery('(pointer: coarse)')
-export const usePortrait = () => useMediaQuery('(orientation: portrait)')
 /** Short screens (a phone held sideways): panels and bars shrink to leave the map visible. */
 export const useShortScreen = () => useMediaQuery('(max-height: 520px)')
+/** Phone-width screens: panels become bottom sheets and the controls move within thumb reach. */
+export const useNarrowScreen = () => useMediaQuery('(max-width: 720px)')

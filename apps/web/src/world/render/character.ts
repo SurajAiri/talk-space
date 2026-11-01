@@ -167,6 +167,27 @@ export function drawCharacter(
   g.restore();
 }
 
+/**
+ * How far to slide a speech bubble sideways so it stays inside the visible area. It never slides so
+ * far that the tail (which points at the speaker, at x = 0) would leave the bubble.
+ * `visible` is relative to the speaker, in world units; the bubble is drawn at `scale`.
+ */
+export function bubbleShift(width: number, scale: number, visible?: { minX: number; maxX: number }): number {
+  if (!visible) return 0;
+  const lo = visible.minX / scale + 8;
+  const hi = visible.maxX / scale - 8;
+  let shift = 0;
+  if (-width / 2 < lo) shift = lo + width / 2;
+  else if (width / 2 > hi) shift = hi - width / 2;
+  const limit = Math.max(0, width / 2 - 18);
+  return Math.max(-limit, Math.min(limit, shift));
+}
+
+/** A bubble belongs to a person you can see: if they are off screen it would only be a clipped fragment at the edge. */
+export function bubbleVisible(visible?: { minX: number; maxX: number }): boolean {
+  return !visible || (visible.minX < -6 && visible.maxX > 6);
+}
+
 const UI_FONT = "'Instrument Sans Variable', Inter, system-ui, sans-serif"
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
@@ -215,7 +236,14 @@ function wrapLines(g: CanvasRenderingContext2D, text: string, maxW: number, maxL
  * Name tag, speech bubble and reaction above a person. `scale` grows them when the camera is zoomed
  * out (a phone shows the whole room small) so the text stays readable.
  */
-export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Character, time: number, scale = 1) {
+export function drawCharacterOverlays(
+  g: CanvasRenderingContext2D,
+  char: Character,
+  time: number,
+  scale = 1,
+  /** the part of the screen that is visible, as x offsets from this person (world units) */
+  visible?: { minX: number; maxX: number },
+) {
   g.save();
   g.translate(char.x, char.y);
   g.scale(scale, scale);
@@ -254,7 +282,7 @@ export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Charact
 
   let topOffset = pillY - 8;
   const b = char.speechBubble;
-  if (b && b.timer > 0) {
+  if (b && b.timer > 0 && bubbleVisible(visible)) {
     const pop = easeOutBack(clamp01(b.age / 200));
     const fade = clamp01(b.timer / 400);
     const rise = (1 - fade) * 8;
@@ -272,6 +300,8 @@ export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Charact
     const h = lines.length * lineH + padY * 2 + labelH;
     const tail = 7;
     const by = topOffset - tail - h;
+    // keep the whole bubble on screen; the tail still points at the speaker
+    const shift = bubbleShift(w, scale, visible);
 
     // grow out of the tail tip, so it reads as coming from the person
     g.translate(0, topOffset - rise);
@@ -283,7 +313,7 @@ export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Charact
     g.shadowOffsetY = 3;
     g.fillStyle = b.dm ? '#3454f0' : '#ffffff';
     g.beginPath();
-    g.roundRect(-w / 2, by, w, h, 14);
+    g.roundRect(-w / 2 + shift, by, w, h, 14);
     g.moveTo(-7, by + h - 0.5);
     g.lineTo(7, by + h - 0.5);
     g.lineTo(0, by + h + tail);
@@ -297,13 +327,13 @@ export function drawCharacterOverlays(g: CanvasRenderingContext2D, char: Charact
     if (b.dm) {
       g.font = `600 10.5px ${UI_FONT}`;
       g.fillStyle = 'rgba(255, 255, 255, 0.78)';
-      g.fillText('Private', 0, ty + 7);
+      g.fillText('Private', shift, ty + 7);
       ty += labelH;
     }
     g.font = `500 13.5px ${UI_FONT}`;
     g.fillStyle = b.dm ? '#ffffff' : '#0f172a';
     for (const line of lines) {
-      g.fillText(line, 0, ty + lineH / 2);
+      g.fillText(line, shift, ty + lineH / 2);
       ty += lineH;
     }
     g.restore();

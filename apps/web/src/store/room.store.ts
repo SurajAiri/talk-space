@@ -56,6 +56,8 @@ interface RoomState {
   messages: ChatMessage[]
   mic: MicState
   muted: boolean
+  /** we have turned the sound off: nobody is played (our own microphone is separate, see `muted`) */
+  deafened: boolean
   /** The room's 2D world (positions + proximity audio). null for rooms without a map. */
   world: WorldSession | null
   /** why the session ended (kicked, failed to re-join, ...) */
@@ -74,6 +76,7 @@ interface RoomState {
   sendChat: (text: string, toId?: string) => 'sent' | 'invalid' | 'slow-down' | 'unreachable'
   enableMic: () => Promise<void>
   toggleMute: () => void
+  toggleDeafen: () => void
   blockPeer: (id: string) => void
   unblockPeer: (id: string) => void
   /** host only: remove someone from the room (the server enforces that you are the host) */
@@ -89,6 +92,7 @@ const initial = {
   messages: [] as ChatMessage[],
   mic: 'off' as MicState,
   muted: true,
+  deafened: false,
   world: null as WorldSession | null,
   endedReason: null,
   relayOnly: false,
@@ -218,7 +222,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
   function endSession(reason: string) {
     teardown()
-    set({ status: 'ended', endedReason: reason, peers: {}, mic: 'off', muted: true, world: null })
+    set({ status: 'ended', endedReason: reason, peers: {}, mic: 'off', muted: true, deafened: false, world: null })
   }
 
   function applyBlocks(mgr: NetworkManager) {
@@ -507,6 +511,12 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       const muted = !localTrack.enabled
       manager?.setPresence({ muted })
       set({ muted })
+    },
+
+    toggleDeafen: () => {
+      const deafened = !get().deafened
+      world?.setDeafened(deafened)
+      set({ deafened })
     },
 
     blockPeer,

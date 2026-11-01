@@ -3,6 +3,7 @@ import { labelFor, type RoomConfig, type RoomView } from '../../lib/rooms'
 import CopyButton from '../CopyButton'
 import { ChatIcon, ChevronDownIcon, GlobeIcon, MapIcon, MaximizeIcon, MinimizeIcon, PhoneOffIcon, UsersIcon } from '../Icons'
 import { LogoMark } from '../Logo'
+import { MicButton, SpeakerButton } from './AudioControls'
 
 /** Everything that used to be a banner, a header and three panels, as one slim floating bar. */
 export default function RoomTopBar({
@@ -17,6 +18,7 @@ export default function RoomTopBar({
   canFullscreen,
   onChat,
   onPeople,
+  coarse,
   onFullscreen,
   onLeave,
 }: {
@@ -29,12 +31,24 @@ export default function RoomTopBar({
   peopleOpen: boolean
   fullscreen: boolean
   canFullscreen: boolean
+  /** a finger, not a mouse: Leave asks for a second tap */
+  coarse: boolean
   onChat: () => void
   onPeople: () => void
   onFullscreen: () => void
   onLeave: () => void
 }) {
   const [info, setInfo] = useState(false)
+  const [armed, setArmed] = useState(false)
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => void (armTimer.current && clearTimeout(armTimer.current)), [])
+
+  function leaveClicked() {
+    if (!coarse || armed) return onLeave()
+    // a thumb sliding between the icons must not drop someone out of a conversation
+    setArmed(true)
+    armTimer.current = setTimeout(() => setArmed(false), 3000)
+  }
   const wrap = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -86,28 +100,37 @@ export default function RoomTopBar({
               <CopyButton value={room.id} label="Room ID" />
               {room.joinCode && <CopyButton value={room.joinCode} label="Join code" />}
             </div>
+            {canFullscreen && (
+              <button type="button" className="btn btn-outline btn-small rinfo-fs" onClick={onFullscreen}>
+                {fullscreen ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
+                {fullscreen ? 'Exit full screen' : 'Full screen'}
+              </button>
+            )}
           </div>
         )}
       </div>
 
       <div className="rbar-right">
-        <button type="button" className={`rbtn ${chatOpen ? 'is-on' : ''}`} aria-pressed={chatOpen} onClick={onChat}>
+        <button type="button" className={`rbtn rbtn-chat ${chatOpen ? 'is-on' : ''}`} aria-pressed={chatOpen} onClick={onChat}>
           <ChatIcon size={19} />
           <span className="rbtn-label">Chat</span>
           {unread > 0 && !chatOpen && <span className="rbadge">{unread > 9 ? '9+' : unread}</span>}
         </button>
-        <button type="button" className={`rbtn ${peopleOpen ? 'is-on' : ''}`} aria-pressed={peopleOpen} onClick={onPeople}>
+        <button type="button" className={`rbtn rbtn-people ${peopleOpen ? 'is-on' : ''}`} aria-pressed={peopleOpen} onClick={onPeople}>
           <UsersIcon size={19} />
           <span className="rbtn-label">People</span>
         </button>
         {canFullscreen && (
-          <button type="button" className="rbtn rbtn-icon" aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} onClick={onFullscreen}>
+          <button type="button" className="rbtn rbtn-icon rbtn-fs" aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} onClick={onFullscreen}>
             {fullscreen ? <MinimizeIcon size={19} /> : <MaximizeIcon size={19} />}
           </button>
         )}
-        <button type="button" className="rbtn rbtn-leave" onClick={onLeave}>
+        <span className="rbar-sep" aria-hidden="true" />
+        <MicButton />
+        <SpeakerButton />
+        <button type="button" className={`rbtn rbtn-leave ${armed ? 'is-armed' : ''}`} onClick={leaveClicked} aria-label={armed ? 'Tap again to leave' : 'Leave room'}>
           <PhoneOffIcon size={19} />
-          <span className="rbtn-label">Leave</span>
+          <span className="rbtn-label">{armed ? 'Tap again' : 'Leave'}</span>
         </button>
       </div>
     </div>

@@ -21,13 +21,25 @@ interface Channel {
  */
 export class ProximityMixer {
   private ctx: AudioContext | null = null
+  /** every voice passes through this on its way out, so one switch can silence them all */
+  private master: GainNode | null = null
+  private deafened = false
   private readonly channels = new Map<string, Channel>()
 
   private context(): AudioContext | null {
     if (this.ctx) return this.ctx
     if (typeof AudioContext === 'undefined') return null
     this.ctx = new AudioContext()
+    this.master = this.ctx.createGain()
+    this.master.gain.value = this.deafened ? 0 : 1
+    this.master.connect(this.ctx.destination)
     return this.ctx
+  }
+
+  /** Silence (or restore) everything we play. Smoothed, so it never clicks. Voices keep arriving meanwhile. */
+  setDeafened(deafened: boolean) {
+    this.deafened = deafened
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(deafened ? 0 : 1, this.ctx.currentTime, 0.03)
   }
 
   /** Call from any user gesture (key press, tap). Cheap when already running. */
@@ -52,7 +64,7 @@ export class ProximityMixer {
       const src = ctx.createMediaStreamSource(stream) // throws if the stream has no audio track yet
       const gain = ctx.createGain()
       gain.gain.value = 0 // silent until the first hearing calculation says otherwise
-      src.connect(gain).connect(ctx.destination)
+      src.connect(gain).connect(this.master ?? ctx.destination)
       this.channels.set(id, { stream, el, src, gain })
     } catch (err) {
       // No audio track yet: PeerLink calls us again when the track arrives.
@@ -91,5 +103,6 @@ export class ProximityMixer {
     this.detachAll()
     void this.ctx?.close().catch(() => {})
     this.ctx = null
+    this.master = null
   }
 }

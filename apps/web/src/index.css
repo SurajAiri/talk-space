@@ -541,6 +541,7 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
   position: fixed; inset: 0; overflow: hidden; background: var(--night); color: #fff;
   overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none;
 }
+html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-behavior: none; }
 .room-world { position: absolute; inset: 0; }
 .world-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; outline: none; }
 .room-backdrop { position: absolute; inset: 0; background: radial-gradient(60% 60% at 50% 40%, #1b2757, var(--night)); }
@@ -575,6 +576,16 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
   position: absolute; top: -5px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center;
   border-radius: 999px; background: #ff4d6d; color: #fff; font-size: 0.7rem; font-weight: 700; box-shadow: 0 0 0 2px var(--night);
 }
+.rbar-sep { align-self: center; width: 1px; height: 24px; margin: 0 2px; background: rgb(255 255 255 / 0.28); }
+.rbtn.is-live { background: #0b6b4a; border-color: rgb(52 211 155 / 0.7); color: #aef5d9; }
+.rbtn.is-live:hover { background: #0d7a54; }
+.rbtn.is-muted { background: #7d1a30; border-color: rgb(255 107 134 / 0.7); color: #ffc2cd; }
+.rbtn.is-muted:hover { background: #8f2038; }
+.rbtn.is-off { color: #c3cbe6; }
+.rbtn-leave { margin-left: 6px; } /* a little air, so it is never hit by accident */
+.rbtn-leave.is-armed { animation: armed 0.9s ease-in-out infinite; }
+@keyframes armed { 50% { box-shadow: 0 0 0 5px rgb(255 77 109 / 0.35), 0 6px 20px -8px rgb(0 0 0 / 0.6); } }
+.rinfo-fs { align-self: flex-start; }
 .rinfo {
   position: absolute; top: 52px; left: 0; width: min(340px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 12px; padding: 14px;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); user-select: text;
@@ -599,24 +610,6 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
 .hearing-stack { display: flex; margin-left: 2px; }
 .hearing-stack .avatar { margin-left: -8px; box-shadow: 0 0 0 2px #1a2244; }
 .hearing-stack .avatar:first-child { margin-left: 0; }
-
-.micdock { position: absolute; z-index: 16; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.mic {
-  display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 58px; min-width: 58px; padding: 0 22px 0 18px; border: 0; border-radius: 999px;
-  color: #fff; font-weight: 650; font-size: 0.9375rem; cursor: pointer; box-shadow: 0 10px 28px -8px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.12) inset;
-  transition: background-color 0.15s, transform 0.08s;
-}
-.mic:active { transform: scale(0.97); }
-.mic-off { background: var(--brand); }
-.mic-off:hover { background: color-mix(in srgb, var(--brand) 84%, #000); }
-.mic.is-live { background: #0b8a5e; }
-.mic.is-live:hover { background: #0a7a53; }
-.mic.is-live::before { content: ''; position: absolute; inset: -5px; border-radius: inherit; border: 2px solid #34d39b; opacity: 0; animation: live-ring 2.4s ease-out infinite; pointer-events: none; }
-.mic { position: relative; }
-@keyframes live-ring { 0% { opacity: 0.7; transform: scale(0.96); } 100% { opacity: 0; transform: scale(1.12); } }
-.mic.is-muted { background: var(--danger-solid); }
-.mic.is-muted:hover { background: color-mix(in srgb, var(--danger-solid) 84%, #000); }
-.micdock-note { max-width: 300px; margin: 0; padding: 6px 12px; border-radius: var(--r-sm); background: var(--glass); color: #ffd9a0; font-size: 0.78rem; text-align: center; backdrop-filter: blur(10px); }
 
 .movehint {
   position: absolute; z-index: 14; left: 50%; bottom: calc(86px + var(--safe-b)); transform: translateX(-50%); margin: 0; padding: 8px 16px;
@@ -660,18 +653,7 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
   .room-bl { left: auto; right: calc(12px + var(--safe-r)); }
 }
 
-/* rotate prompt (phones held upright) */
-.rotate { position: absolute; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: var(--night); }
-.rotate-card { width: min(360px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
-.rotate-card h2 { font-size: 1.5rem; }
-.rotate-card p { margin: 0; color: #aab4d4; }
-.rotate-card .stack { width: 100%; margin-top: 6px; }
-.rotate-card .btn-ghost { color: #c6cde6; }
-.rotate-art { width: 132px; height: 132px; color: #8da2ff; }
-.rotate-phone { transform-origin: 60px 52px; animation: turn 2.8s ease-in-out infinite; }
-@keyframes turn { 0%, 22% { transform: rotate(0); } 55%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
-
-/* floating panels (chat, people) */
+/* floating panels (chat, people); on phones they are bottom sheets */
 .float {
   position: fixed; left: 0; top: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); color: var(--text);
   border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); user-select: text; touch-action: manipulation;
@@ -683,6 +665,15 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
 .float-title { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 1rem; }
 .float-extra { display: inline-flex; }
 .float-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.float.is-sheet {
+  left: 0; right: 0; top: auto; bottom: 0; width: 100%; border-radius: 22px 22px 0 0; border-bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px); animation: sheet-up 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transition: transform 0.2s ease-out; box-shadow: 0 -18px 50px -12px rgb(0 0 0 / 0.55);
+}
+.float.is-sheet .float-head { position: relative; padding: 18px 8px 8px 16px; border-radius: 22px 22px 0 0; }
+.sheet-handle { position: absolute; top: 7px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 999px; background: var(--border-strong); }
+.sheet-scrim { position: fixed; inset: 0; z-index: 39; background: rgb(6 10 24 / 0.38); animation: fade-in 0.2s ease-out; }
+@keyframes sheet-up { from { transform: translateY(100%); } }
 .count-pill { padding: 1px 8px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); color: var(--text-2); font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .chatw { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -774,25 +765,50 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
 @media (max-width: 720px), (max-height: 520px) {
   .rbtn { padding: 0; width: 44px; justify-content: center; }
   .rbtn-label { display: none; }
-  .rpill { max-width: 46vw; }
-  .rbar-right { gap: 6px; }
-  .mic { height: 52px; min-width: 52px; padding: 0 16px; }
-  .mic-label { display: none; }
-  .mic.is-live { padding: 0; width: 52px; }
-  .mic-off { padding: 0 18px; }
-  .mic-off .mic-label { display: inline; font-size: 0.875rem; }
-  .joystick { width: 118px; height: 118px; }
-  .hearing { padding-right: 10px; max-width: 220px; }
+  .rbtn-fs, .rbar-sep, .rpill-count { display: none; } /* full screen lives in the room details, and the count in the People sheet */
+  .rbtn-leave { margin-left: 4px; }
+  .rbtn-leave.is-armed { width: auto; padding: 0 14px 0 12px; }
+  .rbtn-leave.is-armed .rbtn-label { display: inline; }
+  .rbar-left { flex: 1 1 0; min-width: 0; }
+  .rpill { max-width: 100%; }
+  .rbar-right { gap: 6px; flex: 0 0 auto; }
+
+  /* Chat and People: big round buttons where the right thumb rests */
+  .rbtn-chat, .rbtn-people {
+    position: fixed; right: calc(14px + var(--safe-r)); width: 54px; height: 54px;
+    box-shadow: 0 10px 26px -8px rgb(0 0 0 / 0.7);
+  }
+  .rbtn-people { bottom: calc(18px + var(--safe-b)); }
+  .rbtn-chat { bottom: calc(82px + var(--safe-b)); }
+
+  .joystick { width: 124px; height: 124px; left: calc(16px + var(--safe-l)); bottom: calc(20px + var(--safe-b)); }
+  /* who-can-hear-you sits under the room name instead of competing with the thumbs */
+  .room-bl { left: calc(12px + var(--safe-l)); top: calc(60px + var(--safe-t)); bottom: auto; right: auto; }
+  .hearing { padding-right: 10px; max-width: 210px; }
   .hearing-sub { display: none; }
   .hearing-icon { width: 30px; height: 30px; }
-  .tiles { bottom: calc(76px + var(--safe-b)); width: min(360px, calc(100vw - 280px)); }
-  .movehint { bottom: calc(76px + var(--safe-b)); white-space: normal; text-align: center; max-width: 80vw; }
+  .movehint { white-space: normal; text-align: center; max-width: 84vw; }
+}
+/* upright phone: the bottom corners are taken (joystick, buttons), so messages and hints sit above them */
+@media (max-width: 720px) and (min-height: 521px) {
+  .tiles { bottom: calc(160px + var(--safe-b)); width: calc(100vw - 24px); }
+  .movehint { bottom: calc(168px + var(--safe-b)); }
+}
+/* held sideways (or any very short window): the free space is the middle, between the thumbs */
+@media (max-height: 520px) {
+  .tiles { bottom: calc(18px + var(--safe-b)); width: min(400px, calc(100vw - 300px)); }
+  .movehint { bottom: calc(20px + var(--safe-b)); }
+  .rbtn-chat, .rbtn-people { width: 48px; height: 48px; right: calc(12px + var(--safe-r)); }
+  .rbtn-people { bottom: calc(12px + var(--safe-b)); }
+  .rbtn-chat { bottom: calc(68px + var(--safe-b)); }
+  .joystick { width: 112px; height: 112px; }
 }
 @media (max-height: 520px) {
   .rbar { padding-top: calc(8px + var(--safe-t)); }
   .rpill, .rbtn { height: 40px; }
   .rbtn-icon { width: 40px; }
   .rinfo { top: 48px; }
+  .room-bl { top: calc(54px + var(--safe-t)); }
   .float-head { padding: 5px 6px; }
   .chatw-log { padding: 10px; gap: 8px; }
   .chatw-compose { padding: 8px 10px 10px; }
