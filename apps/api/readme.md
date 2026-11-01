@@ -72,7 +72,7 @@ sends them to `/onboarding` until it is set. Lists, limits and suggestions live 
 `lib/better-auth.ts` runs better-auth stateless (no database) just for the Google OAuth
 handshake. `GET /api/v1/auth/google/complete` then finds or creates the user in `users`
 and redirects to the web app with our normal JWT. Register this redirect URI in Google Cloud:
-`http://localhost:5173/api/v1/better-auth/callback/google`
+`<BETTER_AUTH_URL>/api/v1/better-auth/callback/google` (locally `http://localhost:3000/api/v1/better-auth/callback/google`)
 
 ## Rooms & signaling
 

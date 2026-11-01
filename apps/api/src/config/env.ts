@@ -8,6 +8,16 @@ function required(name: string): string {
   return value;
 }
 
+/** A required URL, reduced to its origin (no path, no trailing slash) so it compares equal to a browser's Origin header. */
+function originOf(name: string): string {
+  const value = required(name);
+  try {
+    return new URL(value).origin;
+  } catch {
+    throw new Error(`${name} must be a full URL such as https://example.com (got "${value}")`);
+  }
+}
+
 function list(value: string): string[] {
   return value
     .split(",")
@@ -78,8 +88,10 @@ export const env = {
   TRUST_PROXY: int("TRUST_PROXY", 0),
   // Google login (better-auth). Optional: leave both empty for email + password only.
   BETTER_AUTH_SECRET: secret("BETTER_AUTH_SECRET"),
-  BETTER_AUTH_URL: required("BETTER_AUTH_URL"),
-  WEB_URL: required("WEB_URL"),
+  /** Public address of THIS API (Google redirects the browser back to it). */
+  BETTER_AUTH_URL: originOf("BETTER_AUTH_URL"),
+  /** Address of the web app; the only origin allowed to call this API from a browser. */
+  WEB_URL: originOf("WEB_URL"),
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_ENABLED: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),

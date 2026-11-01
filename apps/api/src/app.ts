@@ -20,18 +20,22 @@ if (env.TRUST_PROXY > 0) app.set("trust proxy", env.TRUST_PROXY);
 
 app.use(helmet());
 
-// The browser talks to this API through the web app's own origin (dev proxy / reverse
-// proxy), so no cross-origin access is granted at all. Browsers from other origins are
-// refused by default (no Access-Control-Allow-Origin header); only the web app's origin
-// may make preflighted requests.
+// The web app lives on its own origin (WEB_URL) and calls this API directly from the browser.
+// Only that exact origin is granted access; every other origin gets no CORS headers at all and
+// is refused by the browser. Credentials are allowed for it because the Google sign-in
+// handshake relies on a short-lived cookie.
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && origin === env.WEB_URL) {
     res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
-    if (req.method === "OPTIONS") return void res.sendStatus(204);
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
+      res.setHeader("Access-Control-Max-Age", "600");
+      return void res.sendStatus(204);
+    }
   }
   next();
 });

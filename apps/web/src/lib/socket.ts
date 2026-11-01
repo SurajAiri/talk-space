@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
 import { useAuthStore } from '../store/auth.store'
+import { API_URL, SOCKET_PATH } from './config'
 
 let socket: Socket | null = null
 
@@ -8,8 +9,8 @@ export function connectSocket(): Promise<Socket> {
   if (socket?.connected) return Promise.resolve(socket)
   socket?.disconnect()
 
-  const s = io({
-    path: '/api/v1/realtime',
+  const s = io(API_URL, {
+    path: SOCKET_PATH,
     transports: ['websocket'],
     // read at (re)connect time so a refreshed token is picked up
     auth: (cb) => cb({ token: useAuthStore.getState().token }),

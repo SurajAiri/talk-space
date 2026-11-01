@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api, ApiError, type User } from '../lib/api'
 import { authClient } from '../lib/auth-client'
+import { API_URL } from '../lib/config'
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** How often loadUser retries when the API can't be reached (still starting, waking up, brief outage). */
+const LOAD_RETRIES = 5
+const LOAD_RETRY_DELAY_MS = 2000
 
 interface AuthState {
   token: string | null
@@ -48,16 +55,31 @@ export const useAuthStore = create<AuthState>()(
           set({ user: null, initializing: false })
           return
         }
-        try {
-          const user = await api<User>('/users/me', { token })
-          set({ user, initializing: false })
-          void get().refresh()
-        } catch (err) {
-          // invalid/expired token -> logged out; other errors keep the token
-          if (err instanceof ApiError && err.status === 401) {
-            set({ token: null, user: null })
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const user = await api<User>('/users/me', { token })
+            set({ user, initializing: false })
+            void get().refresh()
+            return
+          } catch (err) {
+            // The API simply isn't answering yet: wait and try again instead of bouncing a
+            // signed-in person to the login page. Gives up quietly after a few tries.
+            if (err instanceof ApiError && err.isNetworkError && attempt < LOAD_RETRIES) {
+              await sleep(LOAD_RETRY_DELAY_MS)
+              if (get().token !== token) {
+                // logged out / replaced meanwhile: whoever changed it owns the next step
+                set({ initializing: false })
+                return
+              }
+              continue
+            }
+            // invalid/expired token -> logged out; other errors keep the token
+            if (err instanceof ApiError && err.status === 401) {
+              set({ token: null, user: null })
+            }
+            set({ initializing: false })
+            return
           }
-          set({ initializing: false })
         }
       },
 
@@ -92,12 +114,14 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      // Redirects to Google; the API then redirects back to /auth/callback with our JWT.
+      // Redirects to Google; the API then redirects back to <this site>/auth/callback with our JWT.
       signInWithGoogle: async () => {
         const { error } = await authClient.signIn.social({
           provider: 'google',
-          callbackURL: '/api/v1/auth/google/complete',
-          errorCallbackURL: '/auth',
+          // The API finishes the handshake and sends the browser back to this site, so both
+          // addresses must be absolute now that the API lives on its own origin.
+          callbackURL: `${API_URL}/api/v1/auth/google/complete`,
+          errorCallbackURL: `${window.location.origin}/auth`,
         })
         if (error) throw new Error(error.message ?? 'Failed to continue with Google')
       },

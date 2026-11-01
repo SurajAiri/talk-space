@@ -184,6 +184,22 @@ describe("hardening", () => {
     assert.equal(res.headers.get("access-control-allow-origin"), null);
   });
 
+  test("the web app's origin is allowed, including the preflight", async () => {
+    const { base } = await import("./helpers.ts");
+    const origin = process.env.WEB_URL!;
+    const res = await fetch(`${base}/api/v1/health`, { headers: { Origin: origin } });
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
+    assert.equal(res.headers.get("access-control-allow-credentials"), "true");
+
+    const pre = await fetch(`${base}/api/v1/auth/login`, {
+      method: "OPTIONS",
+      headers: { Origin: origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,authorization" },
+    });
+    assert.equal(pre.status, 204);
+    assert.equal(pre.headers.get("access-control-allow-origin"), origin);
+    assert.match(pre.headers.get("access-control-allow-headers") ?? "", /Authorization/);
+  });
+
   test("oversized JSON bodies are refused", async () => {
     const r = await http("/auth/login", { body: { email: "a@b.co", password: "x".repeat(40_000) }, ip: "10.6.0.1" });
     assert.equal(r.status, 413);
