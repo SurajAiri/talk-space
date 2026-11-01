@@ -45,8 +45,11 @@ const MAX_BUFFERED_UNRELIABLE = 16 * 1024
 /**
  * One RTCPeerConnection to one remote peer: two pre-negotiated data channels
  * (id 0: reliable+ordered for chat/presence; id 1: unordered, no retransmits for
- * positions) and one bidirectional audio transceiver that exists from the
- * start, so muting/unmuting is just replaceTrack() with no renegotiation.
+ * positions) and one bidirectional audio transceiver, so muting/unmuting is just
+ * replaceTrack() with no renegotiation. The offering side creates it up front; the
+ * answering side adopts the one the first offer brings (see adoptOfferedAudio), because a
+ * transceiver it created itself would never be matched to that offer and would force a
+ * second negotiation round.
  *
  * Negotiation follows the "perfect negotiation" pattern: if both sides send an
  * offer at once (two people joining at the same instant), the "polite" side
@@ -63,7 +66,8 @@ export class PeerLink implements Link {
   private readonly pc: RTCPeerConnection
   private readonly channel: RTCDataChannel
   private readonly posChannel: RTCDataChannel
-  private readonly audio: RTCRtpTransceiver
+  /** null on the answering side until the first offer arrives (then we adopt the one it creates) */
+  private audio: RTCRtpTransceiver | null = null
   private readonly polite: boolean
   private readonly remoteStream = new MediaStream()
 
@@ -145,7 +149,10 @@ export class PeerLink implements Link {
     this.posChannel.onopen = () => opts.onPosOpen?.()
     this.posChannel.onmessage = (e) => opts.onData(e.data)
 
-    this.audio = pc.addTransceiver('audio', { direction: 'sendrecv' })
+    // Only the offerer creates the audio transceiver. addTransceiver() ones are never matched to an
+    // incoming offer (JSEP reuses only addTrack-created ones), so a responder that made its own would
+    // end up with a second, unassociated transceiver and be forced into a second negotiation round.
+    if (opts.initiator) this.audio = pc.addTransceiver('audio', { direction: 'sendrecv' })
     void this.applyAudio()
     this.armWatchdog(STALL_MS)
     this.reportState()
@@ -206,7 +213,18 @@ export class PeerLink implements Link {
     this.opts.onState('closed')
   }
 
+  /** Answering side: the offer created a recvonly audio transceiver. Make it ours and answer sendrecv. */
+  private adoptOfferedAudio() {
+    if (this.audio) return
+    const offered = this.pc.getTransceivers().find((t) => t.receiver.track.kind === 'audio')
+    if (!offered) return
+    this.audio = offered
+    offered.direction = 'sendrecv'
+    void this.applyAudio()
+  }
+
   private applyAudio(): Promise<void> {
+    if (!this.audio) return Promise.resolve() // not negotiated yet; adoptOfferedAudio() applies the latest state
     return this.audio.sender
       .replaceTrack(this.audioOn ? this.localTrack : null)
       .catch((err) => console.warn('[webrtc] replaceTrack failed', err))
@@ -268,6 +286,7 @@ export class PeerLink implements Link {
         await pc.addIceCandidate(c).catch((err) => console.warn('[webrtc] late candidate', err))
       }
       if (description.type === 'offer') {
+        this.adoptOfferedAudio()
         await pc.setLocalDescription()
         this.sendDescription()
       }

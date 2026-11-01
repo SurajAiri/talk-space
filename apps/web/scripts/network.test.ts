@@ -453,3 +453,48 @@ test('speech bubbles: last for longer when the line is longer, are replaced by n
     s.close()
   }
 })
+
+// ---------------------------------------------------------------- audio gate is level-triggered
+
+test('the audio gate is re-asserted on every update, so a replaced link cannot stay out of step', () => {
+  const s = new WorldSession({ map, selfId: 'me' })
+  try {
+    // what the network layer thinks it was last told, per person. A freshly dialled link starts at "on".
+    const link = new Map<string, boolean>()
+    s.attach(() => {}, (id, on) => link.set(id, on))
+
+    const near = { x: s.local.x, y: s.local.y, dir: 'down', moving: false } as const
+    assert.equal(hearingGain(map, s.local, near), 1, 'precondition: standing together')
+    s.onRemotePosition('near', near)
+    s.onRemotePosition('far', { x: 1, y: 1, dir: 'down', moving: false })
+    assert.equal(hearingGain(map, s.local, { x: 1, y: 1 }), 0, 'precondition: out of earshot')
+
+    s.setBlockedIds(new Set()) // runs a hearing update
+    assert.equal(link.get('near'), true)
+    assert.equal(link.get('far'), false, 'someone out of earshot gets none of our voice')
+
+    // the peer re-joins / the link is redialled: the new link starts from its default again
+    link.set('far', true)
+    link.set('near', false)
+    s.setBlockedIds(new Set()) // the very next update must put both right, with no change in positions
+    assert.equal(link.get('far'), false, 'told again, not assumed to still be off')
+    assert.equal(link.get('near'), true, 'and told again that it should be on')
+  } finally {
+    s.close()
+  }
+})
+
+test('re-asserting the gate every update costs the link nothing when nothing changed', () => {
+  // the contract the level-triggered gate relies on: PeerLink.setAudioEnabled returns early when unchanged
+  const s = new WorldSession({ map, selfId: 'me' })
+  try {
+    const calls: [string, boolean][] = []
+    s.attach(() => {}, (id, on) => calls.push([id, on]))
+    s.onRemotePosition('p', { x: s.local.x, y: s.local.y, dir: 'down', moving: false })
+    for (let i = 0; i < 3; i++) s.setBlockedIds(new Set())
+    assert.ok(calls.length >= 3, 'called every time')
+    assert.ok(calls.every(([id, on]) => id === 'p' && on === true), 'always the same answer while nothing changes')
+  } finally {
+    s.close()
+  }
+})

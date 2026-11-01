@@ -241,10 +241,11 @@ export class WorldSession {
       this.outOfRangeSince.set(id, since)
       on = now - since < AUDIO_OFF_DELAY_MS && this.gated.get(id) === true
     }
-    if (this.gated.get(id) !== on) {
-      this.gated.set(id, on)
-      this.audioGate(id, on)
-    }
+    // Level-triggered: re-assert every tick. The link underneath can be replaced (peer re-joined,
+    // redial) and then starts from the default, so a cached "already told them" is a lie.
+    // PeerLink.setAudioEnabled() returns early when nothing changed, so this is free.
+    this.gated.set(id, on)
+    this.audioGate(id, on)
   }
 
   /** Only wake React when something a person would notice changed. */
