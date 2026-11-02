@@ -157,9 +157,17 @@
 
 /* ---------- smaller screens ---------- */
 @media (max-width: 900px) {
-  .lp-wrap { padding: 0 20px; }
+  /* sides only: the shorthand `padding: 0 20px` also wiped the top/bottom padding of .lp-nav and .lp-herotop,
+     which is what pushed the heading up against the header on phones */
+  .lp-wrap { padding-left: 20px; padding-right: 20px; }
   .lp-sec { padding: 84px 0; }
-  .lp-navlinks, .lp-login { display: none; }
+  .lp-navlinks { display: none; }
+  .lp-nav { gap: 10px; padding-top: 16px; padding-bottom: 16px; }
+  .lp-brand { font-size: 1.15rem; gap: 8px; min-width: 0; white-space: nowrap; }
+  .lp-navcta { gap: 14px; flex-shrink: 0; }
+  .lp-login { font-size: 0.92rem; white-space: nowrap; }
+  .lp-btn-sm { padding: 0.45rem 0.9rem; font-size: 0.9rem; white-space: nowrap; }
+  .lp-herotop { padding-top: 28px; padding-bottom: 32px; }
   .lp-herotop, .lp-split, .lp-whogrid, .lp-safegrid { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .lp-hero { padding-bottom: 64px; }
   .lp-window { aspect-ratio: 4 / 5; }
@@ -173,6 +181,13 @@
   .lp-safe { grid-template-columns: minmax(0, 1fr); }
   .lp-ctabox { padding: 32px 24px; }
   .lp-cta { padding: 90px 0; }
+}
+@media (max-width: 380px) {
+  .lp-wrap { padding-left: 16px; padding-right: 16px; }
+  .lp-brand { font-size: 1.02rem; gap: 6px; }
+  .lp-navcta { gap: 10px; }
+  .lp-login { font-size: 0.86rem; }
+  .lp-btn-sm { padding: 0.4rem 0.7rem; font-size: 0.85rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp *, .lp *::before, .lp *::after { animation: none !important; transition: none !important; }
