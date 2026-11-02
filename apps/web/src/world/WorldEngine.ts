@@ -83,7 +83,7 @@ export class WorldEngine {
     this.opts = opts
     this.canvas = opts.canvas
     this.session = opts.session
-    const ctx = opts.canvas.getContext('2d')
+    const ctx = opts.canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('Canvas 2D is not available')
     this.ctx = ctx
 
@@ -240,9 +240,16 @@ export class WorldEngine {
     this.cssW = Math.max(1, rect.width)
     this.cssH = Math.max(1, rect.height)
     this.dpr = Math.min(window.devicePixelRatio || 1, 2) // 3x phones would 9x the fill cost for no visible gain
-    this.canvas.width = Math.round(this.cssW * this.dpr)
-    this.canvas.height = Math.round(this.cssH * this.dpr)
+    const w = Math.round(this.cssW * this.dpr)
+    const h = Math.round(this.cssH * this.dpr)
+    // Assigning canvas.width / height wipes the bitmap EVEN when the value is unchanged, so only touch them when the
+    // size really changed (phones fire resize for address-bar and safe-area tweaks that change nothing).
+    if (this.canvas.width !== w) this.canvas.width = w
+    if (this.canvas.height !== h) this.canvas.height = h
     if (!this.userZoomed) this.zoom = clamp(Math.min(this.cssH / (FIT_TILES_TALL * TILE), this.cssW / (FIT_TILES_WIDE * TILE)), 0.7, 1.3)
+    // ResizeObserver callbacks run AFTER this frame's requestAnimationFrame and just BEFORE the screen is painted. A
+    // wiped canvas would therefore be shown blank for one frame (the flicker). Redraw right now so it never is.
+    if (this.raf) this.render(performance.now())
   }
 
   // ---------- loop ----------

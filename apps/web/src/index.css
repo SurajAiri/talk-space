@@ -618,10 +618,14 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
   --safe-l: env(safe-area-inset-left, 0px);
   position: fixed; inset: 0; overflow: hidden; background: var(--night); color: #fff;
   overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none;
+  /* no grey/blue flash over the map when you tap it, and no long-press menu */
+  -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
 }
 html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-behavior: none; }
 .room-world { position: absolute; inset: 0; }
-.world-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; outline: none; }
+.world-canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; -webkit-tap-highlight-color: transparent; }
+/* a pointer hand only where there is a mouse: on phones it makes the browser treat the whole map as a tappable link */
+@media (hover: hover) and (pointer: fine) { .world-canvas { cursor: pointer; } }
 .room-backdrop { position: absolute; inset: 0; background: radial-gradient(60% 60% at 50% 40%, #1b2757, var(--night)); }
 .room-screen button, .room-screen select, .room-screen input { touch-action: manipulation; }
 
