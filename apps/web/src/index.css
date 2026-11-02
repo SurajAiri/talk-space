@@ -616,6 +616,9 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
+  /* The free Netlify plan stamps a "Powered by Netlify" badge in the bottom-right corner, over everything. This is the
+     height we leave empty there (one round button + its gap). Set it to 0px if the badge is ever removed. */
+  --host-badge: 64px;
   position: fixed; inset: 0; overflow: hidden; background: var(--night); color: #fff;
   overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none;
   /* no grey/blue flash over the map when you tap it, and no long-press menu */
@@ -732,7 +735,7 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .joystick-knob { position: relative; width: 58px; height: 58px; border-radius: 50%; background: rgb(255 255 255 / 0.92); box-shadow: 0 6px 16px rgb(0 0 0 / 0.4); will-change: transform; }
 .joystick.is-active .joystick-knob { background: #fff; }
 @media (pointer: coarse) {
-  .room-bl { left: auto; right: calc(12px + var(--safe-r)); }
+  .room-bl { left: auto; right: calc(12px + var(--safe-r)); bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
 }
 
 /* floating panels (chat, people); on phones they are bottom sheets */
@@ -1031,8 +1034,8 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
     position: fixed; right: calc(14px + var(--safe-r)); width: 54px; height: 54px;
     box-shadow: 0 10px 26px -8px rgb(0 0 0 / 0.7);
   }
-  .rbtn-people { bottom: calc(18px + var(--safe-b)); }
-  .rbtn-chat { bottom: calc(82px + var(--safe-b)); }
+  .rbtn-people { bottom: calc(18px + var(--safe-b) + var(--host-badge)); }
+  .rbtn-chat { bottom: calc(82px + var(--safe-b) + var(--host-badge)); }
 
   .joystick { width: 124px; height: 124px; left: calc(16px + var(--safe-l)); bottom: calc(20px + var(--safe-b)); }
   /* who-can-hear-you sits under the room name instead of competing with the thumbs */
@@ -1051,9 +1054,10 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 @media (max-height: 520px) {
   .tiles { bottom: calc(18px + var(--safe-b)); width: min(400px, calc(100vw - 300px)); }
   .movehint { bottom: calc(20px + var(--safe-b)); }
+  .room-screen { --host-badge: 56px; } /* smaller buttons, so one button + gap is 56px here */
   .rbtn-chat, .rbtn-people { width: 48px; height: 48px; right: calc(12px + var(--safe-r)); }
-  .rbtn-people { bottom: calc(12px + var(--safe-b)); }
-  .rbtn-chat { bottom: calc(68px + var(--safe-b)); }
+  .rbtn-people { bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
+  .rbtn-chat { bottom: calc(68px + var(--safe-b) + var(--host-badge)); }
   .joystick { width: 112px; height: 112px; }
 }
 @media (max-height: 520px) {

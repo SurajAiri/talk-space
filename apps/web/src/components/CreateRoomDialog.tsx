@@ -1,6 +1,7 @@
 import { useEffect, useState, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
+import { useCoarsePointer } from '../hooks/useMedia'
 import { roomsApi, type RoomConfig } from '../lib/rooms'
 import { listWorldMaps, type RoomMapKey } from '../world/maps'
 import { normalizeTag, validateTag } from '../lib/validation'
@@ -18,6 +19,7 @@ const maps = listWorldMaps()
 
 export default function CreateRoomDialog({ config, onClose }: Props) {
   const navigate = useNavigate()
+  const coarse = useCoarsePointer()
   const [submitting, setSubmitting] = useState(false)
   const [attempted, setAttempted] = useState(false)
   const [form, setForm] = useState({
@@ -52,6 +54,9 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
     setSubmitting(true)
     try {
       const room = await roomsApi.create({ ...form, title: form.title.trim() })
+      // Close the on-screen keyboard BEFORE the room mounts: otherwise the room measures a half-height screen
+      // (worst in "Desktop site" mode) and its bar and buttons end up off-screen.
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
       // the join code travels in router state, not in the URL
       navigate(`/room/${room.id}`, { state: { joinCode: room.joinCode } })
     } catch (err) {
@@ -73,7 +78,7 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
           <div className="modal-body">
             <TextField
               label="Title"
-              autoFocus
+              autoFocus={!coarse}
               counter
               maxLength={config.title.max}
               value={form.title}

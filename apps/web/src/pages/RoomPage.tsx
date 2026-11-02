@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import AppHeader from '../components/AppHeader'
 import { CodeInput, Switch } from '../components/form/fields'
@@ -13,6 +13,7 @@ import Joystick from '../components/room/Joystick'
 import MessageTiles from '../components/room/MessageTiles'
 import RoomTopBar from '../components/room/RoomTopBar'
 import WorldView from '../components/WorldView'
+import { useFitVisibleArea } from '../hooks/useFitVisibleArea'
 import { useRoomConfig } from '../hooks/useRoomConfig'
 import { useCoarsePointer, useShortScreen } from '../hooks/useMedia'
 import { enterFullscreen, exitFullscreen, fullscreenSupported, useIsFullscreen } from '../lib/fullscreen'
@@ -257,6 +258,8 @@ function InRoom() {
   const coarse = useCoarsePointer()
   const short = useShortScreen()
   const fullscreen = useIsFullscreen()
+  const screenRef = useRef<HTMLDivElement>(null)
+  useFitVisibleArea(screenRef, Boolean(room))
 
   // rooms without a map have nothing else to look at, so their panels start open
   const [chatOpen, setChatOpen] = useState(() => !useRoomStore.getState().world)
@@ -299,7 +302,7 @@ function InRoom() {
   const map = world?.map
 
   return (
-    <div className="room-screen">
+    <div className="room-screen" ref={screenRef}>
       {world ? (
         <div className="room-world">
           <WorldView session={world} />

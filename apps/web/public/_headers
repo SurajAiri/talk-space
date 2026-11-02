@@ -1,0 +1,5 @@
+# Link-preview picture: crawlers (WhatsApp, Telegram, Facebook...) fetch this directly.
+/og-image.jpg
+  Content-Type: image/jpeg
+  Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *
