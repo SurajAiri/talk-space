@@ -42,8 +42,8 @@ const TAU = Math.PI * 2
 const W = 1200
 const H = 630
 const MARGIN = 56
-/** WhatsApp quietly drops preview pictures much above this; stay under it with room to spare. */
-const MAX_BYTES = 280 * 1024
+/** WhatsApp quietly drops preview pictures much above ~300 KB, and the sender's phone has to download it on a slow connection: stay far below that. */
+const MAX_BYTES = 90 * 1024
 
 // ---------- plumbing --------------------------------------------------------------------------------------------
 
@@ -354,4 +354,4 @@ while (jpeg.length > MAX_BYTES && quality > 60) {
 }
 fs.writeFileSync(OUT, jpeg)
 console.log(`${path.relative(process.cwd(), OUT)}: ${W}x${H}, ${(jpeg.length / 1024).toFixed(0)} KB (jpeg quality ${quality})`)
-if (jpeg.length > MAX_BYTES) console.warn('warning: still larger than the 280 KB WhatsApp likes; simplify the scene')
+if (jpeg.length > MAX_BYTES) console.warn('warning: still larger than the 90 KB budget; simplify the scene')

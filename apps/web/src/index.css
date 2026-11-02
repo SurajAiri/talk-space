@@ -735,6 +735,8 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .joystick-knob { position: relative; width: 58px; height: 58px; border-radius: 50%; background: rgb(255 255 255 / 0.92); box-shadow: 0 6px 16px rgb(0 0 0 / 0.4); will-change: transform; }
 .joystick.is-active .joystick-knob { background: #fff; }
 @media (pointer: coarse) {
+  /* phones held sideways get a floating panel rather than a sheet: same clearance for the badge */
+  .float:not(.is-sheet) { padding-bottom: var(--host-badge); }
   .room-bl { left: auto; right: calc(12px + var(--safe-r)); bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
 }
 
@@ -752,7 +754,8 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .float-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .float.is-sheet {
   left: 0; right: 0; top: auto; bottom: 0; width: 100%; border-radius: 22px 22px 0 0; border-bottom: 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px); animation: sheet-up 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+  /* leave the bottom-right corner empty for the host's "Powered by Netlify" badge, so it never sits on the send button */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--host-badge, 0px)); animation: sheet-up 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
   transition: transform 0.2s ease-out; box-shadow: 0 -18px 50px -12px rgb(0 0 0 / 0.55);
 }
 .float.is-sheet .float-head { position: relative; padding: 18px 8px 8px 16px; border-radius: 22px 22px 0 0; }
