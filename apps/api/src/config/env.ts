@@ -73,16 +73,42 @@ if (Boolean(GOOGLE_CLIENT_ID) !== Boolean(GOOGLE_CLIENT_SECRET)) {
   );
 }
 
+// TURN has two credential modes (pick ONE):
+//   shared secret   TURN_SECRET                      -> short-lived per-user credentials (coturn REST scheme)
+//   static login    TURN_USERNAME + TURN_CREDENTIAL  -> one fixed login handed to every client
+//                                                       (hosted providers' free tiers, e.g. ExpressTURN)
 const TURN_URLS = list(process.env.TURN_URLS ?? "");
 const TURN_SECRET = process.env.TURN_SECRET ?? "";
+const TURN_USERNAME = process.env.TURN_USERNAME ?? "";
+const TURN_CREDENTIAL = process.env.TURN_CREDENTIAL ?? "";
+const TURN_STATIC = Boolean(TURN_USERNAME || TURN_CREDENTIAL);
 if (TURN_URLS.length > 0) {
-  if (!TURN_SECRET)
-    throw new Error("TURN_URLS is set but TURN_SECRET is empty.");
-  if (isProd && (PLACEHOLDERS.has(TURN_SECRET) || TURN_SECRET.length < 32)) {
-    throw new Error(
-      "TURN_SECRET must be a random string of at least 32 characters in production.",
-    );
+  if (TURN_STATIC) {
+    if (!TURN_USERNAME || !TURN_CREDENTIAL)
+      throw new Error("Set both TURN_USERNAME and TURN_CREDENTIAL, or neither.");
+    if (TURN_SECRET)
+      throw new Error(
+        "TURN_SECRET and TURN_USERNAME/TURN_CREDENTIAL are both set: choose one credential mode.",
+      );
+    // No length rule here: the provider issued the login, we cannot make it stronger.
+  } else {
+    if (!TURN_SECRET)
+      throw new Error(
+        "TURN_URLS is set but there are no credentials: set TURN_SECRET (coturn) " +
+          "or TURN_USERNAME + TURN_CREDENTIAL (hosted provider).",
+      );
+    if (isProd && (PLACEHOLDERS.has(TURN_SECRET) || TURN_SECRET.length < 32)) {
+      throw new Error(
+        "TURN_SECRET must be a random string of at least 32 characters in production.",
+      );
+    }
   }
+} else if (TURN_SECRET || TURN_STATIC) {
+  // Credentials without URLs = TURN silently off, which is exactly how "Can't connect" happens.
+  console.warn(
+    "[ice] TURN credentials are set but TURN_URLS is empty: TURN is DISABLED. " +
+      "Peers on strict NATs (mobile/carrier networks) will not be able to connect.",
+  );
 }
 
 const FORCE_RELAY = bool("FORCE_RELAY");
@@ -119,6 +145,8 @@ export const env = {
   STUN_URLS: list(process.env.STUN_URLS ?? "stun:stun.l.google.com:19302"),
   TURN_URLS,
   TURN_SECRET,
+  TURN_USERNAME,
+  TURN_CREDENTIAL,
   TURN_TTL_SECONDS: int("TURN_TTL_SECONDS", 3600),
   /**
    * Make every client connect through TURN only, so peers never learn each

@@ -148,11 +148,11 @@ See `apps/api/.env.example` for the full, commented list.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`              | Optional Google login. Redirect URI: `<BETTER_AUTH_URL>/api/v1/better-auth/callback/google`                                      |
 | `TRUST_PROXY`                                           | Number of reverse proxies in front of the API, so rate limits see real client addresses                                          |
 | `ROOM_MAX_MEMBERS`, `SEAT_GRACE_SECONDS`                | Room size (default 8) and how long a dropped connection keeps its seat (default 15 s)                                            |
-| `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`, `FORCE_RELAY` | WebRTC connectivity. STUN is enough for most networks; add TURN for strict NATs or to hide IP addresses                          |
+| `STUN_URLS`, `TURN_URLS`, `TURN_SECRET` or `TURN_USERNAME`/`TURN_CREDENTIAL`, `FORCE_RELAY` | WebRTC connectivity. STUN is enough for most networks; add TURN for strict NATs or to hide IP addresses                          |
 
 Room limits, languages and purposes live in `apps/api/src/config/rooms.config.ts`; onboarding limits live in `profile.config.ts`. The web app reads both from the API, so there is nothing to change twice.
 
-For TURN, run [coturn](https://github.com/coturn/coturn) (or use a hosted TURN service) with `use-auth-secret` and `static-auth-secret` set to your `TURN_SECRET`. The API hands out short-lived credentials derived from that secret.
+For TURN, either run [coturn](https://github.com/coturn/coturn) with `use-auth-secret` and `static-auth-secret` set to your `TURN_SECRET` (the API then hands out short-lived per-user credentials), or use a hosted TURN service that gives you a fixed username and password (`TURN_USERNAME` + `TURN_CREDENTIAL`; the same login is sent to every user, see DEPLOY.md §4). Set one style, not both.
 
 ### Web (`apps/web/.env`)
 
@@ -195,4 +195,4 @@ In short: run the API somewhere that keeps WebSockets open, publish `apps/web/di
 | Requests blocked by CORS                                 | `WEB_URL` on the API doesn't exactly match the address in the browser (scheme, host and port; no path)                        |
 | `429 Too Many Requests` while testing sign-up            | Per-IP rate limits. In development, wait or restart Redis; behind a proxy, set `TRUST_PROXY`                                  |
 | No microphone prompt                                     | The page isn't on `https://` or `localhost`                                                                                   |
-| Someone is listed in the room but stays on "Connecting…" | Strict NAT (mobile/carrier networks). Configure a TURN server (`TURN_URLS`, `TURN_SECRET`); see DEPLOY.md §4. The console says why (`[webrtc]`) |
+| Someone is listed in the room but stays on "Connecting…" | Strict NAT (mobile/carrier networks). Configure a TURN server (`TURN_URLS` + credentials); see DEPLOY.md §4. The console says why (`[webrtc]`) |

@@ -16,7 +16,7 @@ Environment variables (see `apps/api/.env.example`):
 | `BETTER_AUTH_URL` | this API's public origin, e.g. `https://api.example.com` |
 | `TRUST_PROXY` | `1` if the host puts a load balancer in front (Render, Railway, Fly, nginx...), otherwise rate limits see one IP for everyone |
 | `GOOGLE_CLIENT_ID/SECRET` | optional; redirect URI `https://api.example.com/api/v1/better-auth/callback/google` |
-| `TURN_URLS`, `TURN_SECRET` | recommended, see below |
+| `TURN_URLS` + (`TURN_SECRET` **or** `TURN_USERNAME`/`TURN_CREDENTIAL`) | recommended, see below |
 
 Steps: `pnpm install` -> `pnpm --filter api build` -> `pnpm --filter api db:migrate` -> `pnpm --filter api start`.
 The health check URL is `/health`. The API needs a host that keeps WebSockets open (not serverless).
@@ -42,8 +42,35 @@ Because the app uses client-side routes (`/home`, `/room/abc`), the host must se
 
 ## 4. TURN (needed, not optional, for a public app)
 
-`docker compose --profile turn up -d coturn` on a machine with a public IP (see the comments in `docker-compose.yml`
-for the secret, firewall ports and external IP), then on the API set `TURN_URLS=turn:HOST:3478?transport=udp,turn:HOST:3478?transport=tcp`
-and the same `TURN_SECRET`. Verify from two different networks (not two devices on one Wi-Fi: those connect directly and
-prove nothing): the console should print `[webrtc] ICE setup { turn: true }`, and for a hostile-NAT pair
-`connected to ...: relay <-> ... (through TURN)`. Without a relay-using pair you have not tested TURN.
+STUN only tells a browser its own public address. It cannot carry packets, so it cannot help two peers behind
+strict (symmetric / carrier-grade) NATs. Only a TURN relay can. Pick one:
+
+**A. Hosted TURN with a fixed login (e.g. ExpressTURN free tier, no server to run).** Copy the host, ports, username
+and password from the provider's dashboard into the API's environment:
+
+```
+TURN_URLS=turn:relay1.expressturn.com:3478?transport=udp,turn:relay1.expressturn.com:3478?transport=tcp,turns:relay1.expressturn.com:443?transport=tcp
+TURN_USERNAME=...
+TURN_CREDENTIAL=...
+```
+
+Trade-offs: the login is the same for everyone, is sent to every joined user's browser and never expires. Anyone
+logged in can read it and spend your quota. Do not commit it; check the provider's usage page; rotate it if usage
+looks wrong. Free hosted relays have also been reported to be unreliable, so test it from real networks and keep
+option B or another provider as a fallback (the switch is only env vars).
+
+**B. Your own coturn.** `docker compose --profile turn up -d coturn` on a machine with a public IP (see the comments
+in `docker-compose.yml` for the secret, firewall ports and external IP), then on the API set
+`TURN_URLS=turn:HOST:3478?transport=udp,turn:HOST:3478?transport=tcp` and the same `TURN_SECRET`. Credentials are
+then per-user and short-lived.
+
+Use one credential style, not both (the API refuses to start otherwise). Set these on the **API**, then restart it:
+the variables are read at boot. The boot log says `ICE: ... TURN on (...)` or `TURN OFF`.
+
+**Verify from two different networks** (not two devices on one Wi-Fi: those connect directly and prove nothing; put one
+device on a phone hotspot). The console should print `[webrtc] ICE setup { turn: true }`, and for a hostile-NAT pair
+`connected to ...: relay <-> ... (through TURN)`. Without a relay-using pair you have not tested TURN. If a link still
+fails, the message tells you why: `turn-failed` = wrong credentials or blocked ports, `relay-failed` = relay reached
+but no path.
+
+Leave `FORCE_RELAY` off until TURN is proven: with it on, a dead relay means nobody connects.

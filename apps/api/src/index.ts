@@ -21,6 +21,14 @@ try {
   process.exit(1);
 }
 
+// One line that answers "is TURN on?" from the server logs (no secrets printed).
+console.log(
+  `ICE: STUN ${env.STUN_URLS.length ? "on" : "OFF"}, TURN ` +
+    (env.TURN_URLS.length
+      ? `on (${env.TURN_USERNAME ? "static login" : "shared secret"}, ${env.TURN_URLS.length} url(s))`
+      : "OFF: peers on strict NATs (mobile/carrier networks) cannot connect"),
+);
+
 const server = createServer(app);
 const io = createSocketServer(server);
 
