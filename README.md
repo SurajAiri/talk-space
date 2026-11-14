@@ -195,4 +195,4 @@ In short: run the API somewhere that keeps WebSockets open, publish `apps/web/di
 | Requests blocked by CORS                                 | `WEB_URL` on the API doesn't exactly match the address in the browser (scheme, host and port; no path)                        |
 | `429 Too Many Requests` while testing sign-up            | Per-IP rate limits. In development, wait or restart Redis; behind a proxy, set `TRUST_PROXY`                                  |
 | No microphone prompt                                     | The page isn't on `https://` or `localhost`                                                                                   |
-| People can't hear each other on some networks            | Strict NAT. Configure a TURN server (`TURN_URLS`, `TURN_SECRET`)                                                              |
+| Someone is listed in the room but stays on "Connecting…" | Strict NAT (mobile/carrier networks). Configure a TURN server (`TURN_URLS`, `TURN_SECRET`); see DEPLOY.md §4. The console says why (`[webrtc]`) |

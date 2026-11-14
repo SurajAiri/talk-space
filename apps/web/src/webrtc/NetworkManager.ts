@@ -1,4 +1,5 @@
 import type { Socket } from 'socket.io-client'
+import type { LinkProblem } from './diagnose.ts'
 import { PeerLink, type Link, type PeerLinkOptions } from './PeerLink.ts'
 import { TokenBucket, WindowCounter } from './RateLimiter.ts'
 import { parseP2PMessage, type LinkState, type P2PMessage, type PosMessage, type SignalData } from './types.ts'
@@ -7,6 +8,8 @@ export type AbuseReason = 'flooding' | 'garbage'
 
 export interface NetworkHandlers {
   onPeerState: (id: string, state: LinkState) => void
+  /** Why a link is failing (blocked UDP, no TURN server, ...). Optional: purely informational. */
+  onPeerProblem?: (id: string, problem: LinkProblem) => void
   onPeerStream: (id: string, stream: MediaStream) => void
   /** `from` is the authenticated sender of the link, never a field in the payload. */
   onPeerMessage: (from: string, msg: P2PMessage) => void
@@ -211,6 +214,7 @@ export class NetworkManager {
         if (s === 'connected') this.redials.set(peerId, { count: 0, timer: null })
         if (s === 'failed') this.scheduleRedial(peerId)
       },
+      onProblem: (p) => current() && this.opts.handlers.onPeerProblem?.(peerId, p),
       onStream: (s) => current() && this.opts.handlers.onPeerStream(peerId, s),
       onData: (raw) => current() && this.receive(peerId, raw),
       onOpen: () => {

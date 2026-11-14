@@ -72,6 +72,54 @@ services:
       MC_HOST_local: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000
     command: ["mb", "--ignore-existing", "local/${MINIO_BUCKET:-app-bucket}"]
 
+  # TURN relay (coturn): the fix for "stuck on Connecting…" between people on strict NATs
+  # (symmetric / carrier-grade NAT: many mobile networks and ISPs), where STUN alone cannot work.
+  #
+  #   export TURN_SECRET=$(openssl rand -hex 32); echo "$TURN_SECRET"   # keep it: the API needs the same value
+  #   export TURN_EXTERNAL_IP=<this machine's public IP>               # required behind cloud 1:1 NAT (AWS/GCP/Oracle...)
+  #   docker compose --profile turn up -d coturn
+  #
+  # Run it on a machine with a PUBLIC IP, not behind your home router. Open on its firewall:
+  #   3478 (udp + tcp), and 49152-50151 (udp). Every relayed link uses one relay port per side, and a
+  #   full-mesh room of 8 relayed people needs ~56, so do not shrink the range casually.
+  # Host networking is deliberate: relaying needs that wide UDP range, which Docker port-mapping handles badly.
+  # It refuses to start without TURN_SECRET (an empty secret would be an open relay).
+  # Relaying to private/internal addresses is denied (SSRF into your own network); because of that, TURN cannot be
+  # tested between two machines on the same LAN as the relay: use real, separate networks.
+  coturn:
+    profiles: ["turn"]
+    image: coturn/coturn:latest # pin a current tag in production: older coturn releases had relay-filter CVEs
+    container_name: app-coturn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+      TURN_REALM: ${TURN_REALM:-talkspace}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        [ -n "$$TURN_SECRET" ] || { echo "TURN_SECRET is empty: refusing to start an open relay" >&2; exit 1; }
+        exec turnserver -n --log-file=stdout --fingerprint --no-cli \
+          --realm="$$TURN_REALM" \
+          --use-auth-secret --static-auth-secret="$$TURN_SECRET" \
+          --listening-port=3478 --min-port=49152 --max-port=50151 \
+          --user-quota=20 --total-quota=2000 \
+          --no-multicast-peers \
+          --denied-peer-ip=0.0.0.0-0.255.255.255 \
+          --denied-peer-ip=10.0.0.0-10.255.255.255 \
+          --denied-peer-ip=100.64.0.0-100.127.255.255 \
+          --denied-peer-ip=127.0.0.0-127.255.255.255 \
+          --denied-peer-ip=169.254.0.0-169.254.255.255 \
+          --denied-peer-ip=172.16.0.0-172.31.255.255 \
+          --denied-peer-ip=192.0.0.0-192.0.0.255 \
+          --denied-peer-ip=192.168.0.0-192.168.255.255 \
+          --denied-peer-ip=198.18.0.0-198.19.255.255 \
+          --denied-peer-ip=240.0.0.0-255.255.255.255 \
+          --denied-peer-ip=::1 \
+          --denied-peer-ip=::ffff:0.0.0.0-::ffff:255.255.255.255 \
+          $${TURN_EXTERNAL_IP:+--external-ip=$$TURN_EXTERNAL_IP}
+
 volumes:
   postgres_data:
   redis_data:

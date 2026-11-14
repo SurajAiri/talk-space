@@ -5,6 +5,7 @@ import { connectSocket, disconnectSocket } from '../lib/socket'
 import { loadBlocked, saveBlocked } from '../lib/blocklist'
 import { loadRoomConfig, reportsApi, type RoomView } from '../lib/rooms'
 import { NetworkManager } from '../webrtc/NetworkManager'
+import { hasIceServer } from '../webrtc/diagnose'
 import { TokenBucket } from '../webrtc/RateLimiter'
 import { loadWorldMap } from '../world/maps'
 import { WorldSession } from '../world/WorldSession'
@@ -15,6 +16,8 @@ export type MicState = 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable'
 
 export interface PeerView extends PeerInfo {
   link: LinkState
+  /** why the link is failing, once ICE has given up on it (cleared when it connects) */
+  problem?: string
   muted: boolean
   stream: MediaStream | null
 }
@@ -236,6 +239,13 @@ export const useRoomStore = create<RoomState>()((set, get) => {
     const relay =
       ack.iceTransportPolicy === 'relay' || (hideIpChoice && ack.relayAvailable) ? 'relay' : 'all'
 
+    // One line that answers "is TURN even configured on this deployment?" without a debugger.
+    console.info('[webrtc] ICE setup', {
+      stun: hasIceServer(ack.iceServers, 'stun'),
+      turn: hasIceServer(ack.iceServers, 'turn'),
+      policy: relay,
+    })
+
     const mgr = new NetworkManager({
       selfId: ack.self.id,
       socket: socket!,
@@ -245,7 +255,8 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       // In a world, voice only flows to people who can hear us; the world switches it on per person.
       audioDefault: !map,
       handlers: {
-        onPeerState: (id, link) => updatePeer(id, { link }),
+        onPeerState: (id, link) => updatePeer(id, link === 'connected' ? { link, problem: undefined } : { link }),
+        onPeerProblem: (id, p) => updatePeer(id, { problem: p.message }),
         onPeerStream: (id, stream) => {
           updatePeer(id, { stream })
           world?.onPeerStream(id, stream)

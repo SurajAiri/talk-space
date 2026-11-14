@@ -35,4 +35,15 @@ Because the app uses client-side routes (`/home`, `/room/abc`), the host must se
 - Serve both over **https**: browsers only allow the microphone on https.
 - Put the web app and API on the **same site** (e.g. `app.example.com` + `api.example.com`). Email login works
   anywhere, but Google login uses a cookie that browsers block between unrelated domains (e.g. `x.vercel.app` + `y.onrender.com`).
-- Without `TURN_URLS`, people behind strict NATs / mobile networks often can't connect audio to each other.
+- **Without `TURN_URLS`, some people can never connect.** They appear in the participant list (that comes from the
+  signaling WebSocket, which works everywhere) but their link stays on "Connecting…" and then "Can't connect", because
+  the peer-to-peer path needs NAT traversal that STUN alone can't do on symmetric / carrier-grade NAT. Set up TURN
+  (section 4). The app now says why a link failed (see the browser console, lines starting with `[webrtc]`).
+
+## 4. TURN (needed, not optional, for a public app)
+
+`docker compose --profile turn up -d coturn` on a machine with a public IP (see the comments in `docker-compose.yml`
+for the secret, firewall ports and external IP), then on the API set `TURN_URLS=turn:HOST:3478?transport=udp,turn:HOST:3478?transport=tcp`
+and the same `TURN_SECRET`. Verify from two different networks (not two devices on one Wi-Fi: those connect directly and
+prove nothing): the console should print `[webrtc] ICE setup { turn: true }`, and for a hostile-NAT pair
+`connected to ...: relay <-> ... (through TURN)`. Without a relay-using pair you have not tested TURN.

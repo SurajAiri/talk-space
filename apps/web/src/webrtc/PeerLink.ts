@@ -1,3 +1,12 @@
+import {
+  candidateTypeOf,
+  candidateTypesInSdp,
+  diagnoseIce,
+  emptyCounts,
+  hasIceServer,
+  type IceReport,
+  type LinkProblem,
+} from './diagnose.ts'
 import type { LinkState, SignalData } from './types.ts'
 
 export interface PeerLinkOptions {
@@ -13,6 +22,8 @@ export interface PeerLinkOptions {
   audioEnabled?: boolean
   sendSignal: (to: string, data: SignalData) => void
   onState: (state: LinkState) => void
+  /** Why the link is failing (see diagnose.ts). Fired as soon as ICE gives up, not only after our own retries. */
+  onProblem?: (problem: LinkProblem) => void
   onStream: (stream: MediaStream) => void
   onData: (raw: unknown) => void
   onOpen: () => void
@@ -85,6 +96,9 @@ export class PeerLink implements Link {
   private pendingCandidates: RTCIceCandidateInit[] = []
   /** signals are processed strictly one after another (offer before its candidates) */
   private queue: Promise<void> = Promise.resolve()
+  /** evidence for diagnoseIce: what kinds of addresses each side produced */
+  private readonly report: IceReport
+  private lastProblem: string | null = null
 
   constructor(opts: PeerLinkOptions) {
     this.opts = opts
@@ -92,6 +106,14 @@ export class PeerLink implements Link {
     this.polite = opts.selfId < opts.remoteId
     this.localTrack = opts.localAudioTrack
     this.audioOn = opts.audioEnabled ?? true
+    this.report = {
+      local: emptyCounts(),
+      remote: emptyCounts(),
+      serverErrors: [],
+      stunConfigured: hasIceServer(opts.iceServers, 'stun'),
+      turnConfigured: hasIceServer(opts.iceServers, 'turn'),
+      relayOnly: opts.iceTransportPolicy === 'relay',
+    }
 
     const pc = new RTCPeerConnection({
       iceServers: opts.iceServers,
@@ -108,7 +130,17 @@ export class PeerLink implements Link {
     }
 
     pc.onicecandidate = ({ candidate }) => {
-      if (candidate) opts.sendSignal(this.remoteId, { candidate: candidate.toJSON() })
+      if (!candidate) return
+      const type = candidate.type ?? candidateTypeOf(candidate.candidate)
+      if (type) this.report.local[type]++
+      opts.sendSignal(this.remoteId, { candidate: candidate.toJSON() })
+    }
+    // STUN/TURN lookups that failed. Chrome reports one per unreachable interface (IPv6, VPN, ...),
+    // so a single error means little; they are kept as context for the failure hint only.
+    pc.onicecandidateerror = (e) => {
+      if (this.report.serverErrors.length < 5) {
+        this.report.serverErrors.push({ url: e.url, code: e.errorCode, text: e.errorText })
+      }
     }
 
     pc.onnegotiationneeded = async () => {
@@ -128,9 +160,13 @@ export class PeerLink implements Link {
     }
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed' && this.iceRestarts < MAX_ICE_RESTARTS) {
-        this.iceRestarts++
-        pc.restartIce()
+      if (pc.iceConnectionState === 'failed') {
+        // Everything the browser could try has been tried: say why, now, instead of after our retries.
+        this.reportProblem()
+        if (this.iceRestarts < MAX_ICE_RESTARTS) {
+          this.iceRestarts++
+          pc.restartIce()
+        }
       }
     }
     pc.onconnectionstatechange = () => this.reportState()
@@ -206,6 +242,7 @@ export class PeerLink implements Link {
     this.channel.onopen = this.channel.onmessage = null
     this.posChannel.onopen = this.posChannel.onmessage = null
     this.pc.onnegotiationneeded = this.pc.onicecandidate = this.pc.ontrack = null
+    this.pc.onicecandidateerror = null
     this.pc.onconnectionstatechange = this.pc.oniceconnectionstatechange = null
     this.channel.close()
     this.posChannel.close()
@@ -253,6 +290,7 @@ export class PeerLink implements Link {
     if (this.closed || this.pc.connectionState === 'connected') return
     if (++this.stallRounds > MAX_STALL_ROUNDS) {
       this.gaveUp = true
+      this.reportProblem()
       this.reportState()
       return
     }
@@ -268,6 +306,14 @@ export class PeerLink implements Link {
   private async processSignal({ description, candidate }: SignalData) {
     if (this.closed) return
     const pc = this.pc
+
+    // Evidence for diagnoseIce. Counted before any early return: a candidate we end up ignoring
+    // still proves the other side is gathering addresses.
+    if (candidate) {
+      const t = candidateTypeOf(candidate.candidate)
+      if (t) this.report.remote[t]++
+    }
+    if (description) for (const t of candidateTypesInSdp(description.sdp)) this.report.remote[t]++
 
     if (description) {
       const collision =
@@ -303,13 +349,58 @@ export class PeerLink implements Link {
     }
   }
 
+  /**
+   * Logs which kind of path the call ended up on (host/srflx = direct, relay = through TURN).
+   * This is how you confirm a TURN server is really being used. Best effort: purely diagnostic.
+   */
+  private async logRoute() {
+    try {
+      const stats = await this.pc.getStats()
+      type Entry = { type?: string; selectedCandidatePairId?: string; nominated?: boolean; state?: string; localCandidateId?: string; remoteCandidateId?: string; candidateType?: string }
+      const get = (id?: string) => (id ? (stats.get(id) as Entry | undefined) : undefined)
+      let pair: Entry | undefined
+      stats.forEach((r: Entry) => {
+        if (r.type === 'transport') pair ??= get(r.selectedCandidatePairId)
+      })
+      if (!pair) {
+        stats.forEach((r: Entry) => {
+          if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair ??= r
+        })
+      }
+      if (!pair) return
+      const local = get(pair.localCandidateId)?.candidateType
+      const remote = get(pair.remoteCandidateId)?.candidateType
+      console.info(`[webrtc] connected to ${this.remoteId}: ${local ?? '?'} <-> ${remote ?? '?'}${local === 'relay' || remote === 'relay' ? ' (through TURN)' : ' (direct)'}`)
+    } catch {
+      /* diagnostics must never affect the connection */
+    }
+  }
+
+  private reportProblem() {
+    if (this.closed) return
+    const problem = diagnoseIce(this.report)
+    if (problem.code === this.lastProblem) return // already said so; don't spam the console or the UI
+    this.lastProblem = problem.code
+    console.warn(`[webrtc] link to ${this.remoteId} failed (${problem.code}): ${problem.hint}`, {
+      local: this.report.local,
+      remote: this.report.remote,
+      serverErrors: this.report.serverErrors,
+      stun: this.report.stunConfigured,
+      turn: this.report.turnConfigured,
+      relayOnly: this.report.relayOnly,
+    })
+    this.opts.onProblem?.(problem)
+  }
+
   private reportState() {
     if (this.closed) return
     const s = this.pc.connectionState
     if (s === 'connected') {
       this.gaveUp = false
+      this.lastProblem = null
       this.stallRounds = 0
       this.clearWatchdog()
+      void this.logRoute()
       this.opts.onState('connected')
     } else if (this.gaveUp) {
       this.opts.onState('failed')

@@ -56,6 +56,11 @@ export default function ParticipantList({ onMessage }: { onMessage: (peerId: str
                 </span>
                 {p.link !== 'connected' && <span className={LINK_TONE[p.link] === 'bad' ? 'is-bad' : 'is-warn'}>{LINK_LABEL[p.link]}</span>}
               </div>
+              {p.link !== 'connected' && p.problem && (
+                <div className="person-sub">
+                  <span className="is-bad">{p.problem}</span>
+                </div>
+              )}
             </div>
             <PeerActions peerId={p.id} name={p.name} onMessage={() => onMessage(p.id)} />
           </li>
