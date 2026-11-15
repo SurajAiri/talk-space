@@ -1,17 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import AppHeader from '../components/AppHeader'
 import CreateRoomDialog from '../components/CreateRoomDialog'
 import JoinPrivateForm from '../components/JoinPrivateForm'
 import { SelectField, Switch, TextField } from '../components/form/fields'
-import { GlobeIcon, HashIcon, LockIcon, PlusIcon, SearchIcon, VolumeIcon } from '../components/Icons'
+import { GlobeIcon, HashIcon, LockIcon, PlusIcon, RotateIcon, SearchIcon, VolumeIcon } from '../components/Icons'
 import { LogoMark } from '../components/Logo'
 import RoomCard from '../components/RoomCard'
 import { useDebounced } from '../hooks/useDebounced'
 import { useRoomConfig } from '../hooks/useRoomConfig'
 import { roomsApi, type RoomFilters, type RoomView } from '../lib/rooms'
 
-const POLL_MS = 5000
+/**
+ * Rooms are ephemeral, so the list goes stale, but every refresh costs the server a few Redis reads PER ROOM
+ * per open lobby. So: a slow background refresh, only while this tab is actually visible, one more when the
+ * person comes back to the tab, and a button for "I want it now".
+ */
+const POLL_MS = 30_000
+/** coming back to the tab refreshes only if the list is at least this old */
+const STALE_MS = 10_000
 
 export default function LobbyPage() {
   const navigate = useNavigate()
@@ -28,24 +35,48 @@ export default function LobbyPage() {
   const [rooms, setRooms] = useState<RoomView[] | null>(null)
   const [loadError, setLoadError] = useState(false)
 
-  // Rooms are ephemeral, so keep the list fresh while the lobby is open.
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve())
+
   useEffect(() => {
     let cancelled = false
-    const load = async () => {
-      try {
-        const list = await roomsApi.list(applied)
-        if (cancelled) return
-        setRooms(list)
-        setLoadError(false)
-      } catch {
-        if (!cancelled) setLoadError(true)
-      }
+    let inFlight: Promise<void> | null = null
+    let loadedAt = 0
+
+    // One request at a time: a button press during a background refresh just joins it.
+    const load = (): Promise<void> => {
+      if (inFlight) return inFlight
+      setRefreshing(true)
+      inFlight = (async () => {
+        try {
+          const list = await roomsApi.list(applied)
+          if (cancelled) return
+          setRooms(list)
+          setLoadError(false)
+          loadedAt = Date.now()
+        } catch {
+          if (!cancelled) setLoadError(true)
+        } finally {
+          inFlight = null
+          if (!cancelled) setRefreshing(false)
+        }
+      })()
+      return inFlight
     }
+    refreshRef.current = load
     void load()
-    const id = setInterval(load, POLL_MS)
+
+    const id = setInterval(() => {
+      if (!document.hidden) void load()
+    }, POLL_MS)
+    const onVisible = () => {
+      if (!document.hidden && Date.now() - loadedAt > STALE_MS) void load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
       clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [applied])
 
@@ -70,10 +101,22 @@ export default function LobbyPage() {
                   : `${people} ${people === 1 ? 'person is' : 'people are'} talking in ${rooms.length} ${rooms.length === 1 ? 'room' : 'rooms'}.`}
             </p>
           </div>
-          <button type="button" className="btn btn-lg" disabled={!config} onClick={() => setCreating(true)}>
-            <PlusIcon size={18} />
-            New room
-          </button>
+          <div className="page-actions">
+            <button
+              type="button"
+              className={`btn btn-outline btn-lg${refreshing ? ' is-spinning' : ''}`}
+              disabled={refreshing}
+              aria-busy={refreshing}
+              onClick={() => void refreshRef.current()}
+            >
+              <RotateIcon size={18} />
+              Refresh
+            </button>
+            <button type="button" className="btn btn-lg" disabled={!config} onClick={() => setCreating(true)}>
+              <PlusIcon size={18} />
+              New room
+            </button>
+          </div>
         </div>
 
         <div className="lobby">
@@ -134,7 +177,7 @@ export default function LobbyPage() {
 
             {loadError && (
               <p className="notice notice-error" role="alert">
-                Couldn&apos;t load rooms. Retrying…
+                Couldn&apos;t load rooms. Check your connection, then press Refresh.
               </p>
             )}
             {rooms === null && !loadError && (

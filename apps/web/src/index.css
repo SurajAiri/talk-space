@@ -297,6 +297,8 @@ a.btn { text-decoration: none; }
 /* ---------- lobby ---------- */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
 .page-head h1 { font-size: 2rem; letter-spacing: -0.03em; }
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.is-spinning svg { animation: spin 0.8s linear infinite; }
 .page-sub { margin-top: 4px; color: var(--text-2); }
 .lobby { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
 .lobby-side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: calc(var(--topbar-h) + 24px); }
@@ -1016,6 +1018,10 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   .room-card-side { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; min-width: 0; }
   .occupancy { flex-direction: row; align-items: center; gap: 10px; }
   .modal-head, .modal-body, .modal-foot { padding-inline: 18px; }
+  /* On phones the host's "Powered by Netlify" badge sits in the bottom-right corner, over everything: keep the dialog
+     (and so its Create / Save buttons) clear of it. Set --host-badge to 0px if the badge is ever removed. */
+  .overlay { --host-badge: 64px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--host-badge)); }
+  .modal { max-height: calc(100dvh - 32px - env(safe-area-inset-bottom, 0px) - var(--host-badge)); }
   .pick-row { grid-template-columns: 1fr; }
   .toolbar .switch { flex: 1 1 100%; }
 }

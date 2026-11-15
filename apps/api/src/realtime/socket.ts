@@ -10,11 +10,7 @@ import {
 } from "../features/rooms/schemas.js";
 import * as roomService from "../features/rooms/services.js";
 import * as roomStore from "../features/rooms/store.js";
-import type {
-  JoinErrorCode,
-  PeerProfile,
-  RoomView,
-} from "../features/rooms/types.js";
+import type { JoinErrorCode, PeerProfile, RoomView } from "../features/rooms/types.js";
 import { findAuthState, findUserById } from "../features/user/services.js";
 import { redis } from "../lib/redis.js";
 import { buildIceServers, type IceServer } from "../services/ice.service.js";
@@ -61,10 +57,7 @@ export type JoinAck =
 interface ClientToServerEvents {
   "room:join": (payload: unknown, ack: (res: JoinAck) => void) => void;
   "room:leave": (ack?: () => void) => void;
-  "room:kick": (
-    payload: unknown,
-    ack?: (res: { ok: boolean; message?: string }) => void,
-  ) => void;
+  "room:kick": (payload: unknown, ack?: (res: { ok: boolean; message?: string }) => void) => void;
   signal: (payload: unknown) => void;
 }
 
@@ -86,18 +79,12 @@ interface SocketData {
   joinCount: number;
 }
 
-type AppSocket = Socket<
-  ClientToServerEvents,
-  ServerToClientEvents,
-  Record<string, never>,
-  SocketData
->;
+type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
 export const SOCKET_PATH = "/api/v1/realtime";
 
 const roomChannel = (roomId: string) => `room:${roomId}`;
-const seatChannel = (roomId: string, userId: string) =>
-  `room:${roomId}:user:${userId}`;
+const seatChannel = (roomId: string, userId: string) => `room:${roomId}:user:${userId}`;
 
 // Signaling bursts (ICE candidates for up to ~7 peers) are fine; floods are not.
 const SIGNAL_LIMIT = 600;
@@ -107,64 +94,60 @@ const JOIN_LIMIT = 10;
 const JOIN_WINDOW_MS = 30_000;
 
 export function createSocketServer(httpServer: HttpServer) {
-  const io = new Server<
-    ClientToServerEvents,
-    ServerToClientEvents,
-    Record<string, never>,
-    SocketData
-  >(httpServer, {
-    path: SOCKET_PATH,
-    cors: { origin: env.WEB_URL },
-    maxHttpBufferSize: 64 * 1024,
-    transports: ["websocket"],
-  });
+  const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(
+    httpServer,
+    {
+      path: SOCKET_PATH,
+      cors: { origin: env.WEB_URL },
+      maxHttpBufferSize: 64 * 1024,
+      transports: ["websocket"],
+    },
+  );
 
   // Rooms, seats and "who is in this channel" are shared through Redis, so any
   // number of API instances can run side by side behind a load balancer.
   const pub = redis.duplicate();
   const sub = redis.duplicate();
-  pub.on("error", (err) =>
-    console.error("Redis (socket pub) error:", err.message),
-  );
-  sub.on("error", (err) =>
-    console.error("Redis (socket sub) error:", err.message),
-  );
+  pub.on("error", (err) => console.error("Redis (socket pub) error:", err.message));
+  sub.on("error", (err) => console.error("Redis (socket sub) error:", err.message));
   io.adapter(createAdapter(pub, sub));
   setIo(io);
 
   io.use(async (socket, next) => {
+    // 1. Is the token valid? A bad or expired token is final: the client must sign in again.
+    let auth: { id: string; tv: number };
     try {
       const token = (socket.handshake.auth as { token?: unknown }).token;
       if (typeof token !== "string") return next(new Error("UNAUTHORIZED"));
-      const { id, tv } = verifyJWT(token);
-      const state = await findAuthState(id);
-      if (!state || state.tokenVersion !== tv)
-        return next(new Error("UNAUTHORIZED"));
-      if (state.status !== "active")
-        return next(new Error("ACCOUNT_" + state.status.toUpperCase()));
-      const user = await findUserById(id);
+      auth = verifyJWT(token);
+    } catch {
+      return next(new Error("UNAUTHORIZED"));
+    }
+
+    // 2. Look the account up. A failure HERE is our problem (database restarting, pool exhausted), not the
+    // user's: answering "UNAUTHORIZED" would make the client give up and end the room session, so report
+    // a retryable error instead.
+    try {
+      const state = await findAuthState(auth.id);
+      if (!state || state.tokenVersion !== auth.tv) return next(new Error("UNAUTHORIZED"));
+      if (state.status !== "active") return next(new Error("ACCOUNT_" + state.status.toUpperCase()));
+      const user = await findUserById(auth.id);
       if (!user) return next(new Error("UNAUTHORIZED"));
-      socket.data.user = {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-      };
+      socket.data.user = { id: user.id, name: user.name, username: user.username };
       const now = Date.now();
       socket.data.signalWindowStart = now;
       socket.data.signalCount = 0;
       socket.data.joinWindowStart = now;
       socket.data.joinCount = 0;
       next();
-    } catch {
-      next(new Error("UNAUTHORIZED"));
+    } catch (err) {
+      console.error("socket auth lookup failed", err);
+      next(new Error("UNAVAILABLE"));
     }
   });
 
   /** Seats that dropped without saying goodbye, waiting out the grace period (timer -> release now). */
-  const graceTimers = new Map<
-    ReturnType<typeof setTimeout>,
-    () => Promise<void>
-  >();
+  const graceTimers = new Map<ReturnType<typeof setTimeout>, () => Promise<void>>();
   /** Seat releases in flight; shutdown waits for them so none is lost. */
   const pending = new Set<Promise<unknown>>();
   let closing = false;
@@ -173,18 +156,8 @@ export function createSocketServer(httpServer: HttpServer) {
     void p.finally(() => pending.delete(p));
   };
 
-  async function removeSeat(
-    roomId: string,
-    userId: string,
-    socketId: string,
-    graceful: boolean,
-  ) {
-    const removed = await roomService.leaveRoom(
-      roomId,
-      userId,
-      socketId,
-      graceful,
-    );
+  async function removeSeat(roomId: string, userId: string, socketId: string, graceful: boolean) {
+    const removed = await roomService.leaveRoom(roomId, userId, socketId, graceful);
     if (removed) io.to(roomChannel(roomId)).emit("peer:left", { userId });
   }
 
@@ -202,8 +175,7 @@ export function createSocketServer(httpServer: HttpServer) {
 
     socket.on("room:join", async (payload, ack) => {
       if (typeof ack !== "function") return;
-      const reply = (code: JoinErrorCode, message: string) =>
-        ack({ ok: false, code, message });
+      const reply = (code: JoinErrorCode, message: string) => ack({ ok: false, code, message });
 
       const now = Date.now();
       if (now - socket.data.joinWindowStart > JOIN_WINDOW_MS) {
@@ -219,23 +191,14 @@ export function createSocketServer(httpServer: HttpServer) {
       }
       const parsed = joinPayloadSchema.safeParse(payload);
       if (!parsed.success) {
-        return reply(
-          "INVALID_REQUEST",
-          parsed.error.issues[0]?.message ?? "Invalid request",
-        );
+        return reply("INVALID_REQUEST", parsed.error.issues[0]?.message ?? "Invalid request");
       }
 
       socket.data.joining = true;
       try {
         const { roomId, joinCode, sessionId } = parsed.data;
         const user = socket.data.user;
-        const outcome = await roomService.joinRoom({
-          roomId,
-          joinCode,
-          user,
-          socketId: socket.id,
-          sessionId,
-        });
+        const outcome = await roomService.joinRoom({ roomId, joinCode, user, socketId: socket.id, sessionId });
         if (!outcome.ok) return ack(outcome);
 
         socket.data.roomId = roomId;
@@ -244,15 +207,10 @@ export function createSocketServer(httpServer: HttpServer) {
         const old = outcome.replaced;
         // Same tab coming back after a dropped connection: its peer-to-peer links
         // never broke, and nobody was told it left, so nobody needs to hear it joined.
-        const resumed = Boolean(
-          old && sessionId && old.sessionId === sessionId,
-        );
+        const resumed = Boolean(old && sessionId && old.sessionId === sessionId);
 
         if (old && old.socketId !== socket.id) {
-          io.in(old.socketId).socketsLeave([
-            roomChannel(roomId),
-            seatChannel(roomId, user.id),
-          ]);
+          io.in(old.socketId).socketsLeave([roomChannel(roomId), seatChannel(roomId, user.id)]);
           if (!resumed) io.to(old.socketId).emit("room:replaced");
           io.in(old.socketId).disconnectSockets(true);
         }
@@ -290,14 +248,11 @@ export function createSocketServer(httpServer: HttpServer) {
 
     // The host removes someone. Nothing about messages: only who is seated.
     socket.on("room:kick", async (payload, ack) => {
-      const done = (res: { ok: boolean; message?: string }) =>
-        typeof ack === "function" && ack(res);
+      const done = (res: { ok: boolean; message?: string }) => typeof ack === "function" && ack(res);
       const { roomId, user } = socket.data;
-      if (!roomId)
-        return done({ ok: false, message: "You are not in a room." });
+      if (!roomId) return done({ ok: false, message: "You are not in a room." });
       const parsed = kickPayloadSchema.safeParse(payload);
-      if (!parsed.success)
-        return done({ ok: false, message: "Invalid request" });
+      if (!parsed.success) return done({ ok: false, message: "Invalid request" });
 
       try {
         const outcome = await roomService.kickFromRoom({
@@ -310,10 +265,7 @@ export function createSocketServer(httpServer: HttpServer) {
         const seat = seatChannel(roomId, parsed.data.userId);
         io.to(seat).emit("room:kicked");
         io.in(seat).socketsLeave([roomChannel(roomId), seat]);
-        if (outcome.socketId)
-          io.to(roomChannel(roomId)).emit("peer:left", {
-            userId: parsed.data.userId,
-          });
+        if (outcome.socketId) io.to(roomChannel(roomId)).emit("peer:left", { userId: parsed.data.userId });
         done({ ok: true });
       } catch (err) {
         console.error("room:kick failed", err);
@@ -338,27 +290,20 @@ export function createSocketServer(httpServer: HttpServer) {
 
       // Only sockets seated in the same room are in this channel, so a peer
       // can never signal someone outside its room.
-      socket.to(seatChannel(roomId, parsed.data.to)).emit("signal", {
-        from: user.id,
-        data: parsed.data.data as SignalData,
-      });
+      socket
+        .to(seatChannel(roomId, parsed.data.to))
+        .emit("signal", { from: user.id, data: parsed.data.data as SignalData });
     });
 
     socket.on("disconnect", (reason) => {
       const { roomId, user } = socket.data;
       if (!roomId) return;
-      const fail = (err: unknown) =>
-        console.error("leave on disconnect failed", err);
-      const release = () =>
-        removeSeat(roomId, user.id, socket.id, false).catch(fail);
+      const fail = (err: unknown) => console.error("leave on disconnect failed", err);
+      const release = () => removeSeat(roomId, user.id, socket.id, false).catch(fail);
 
       // Closed on purpose (the client left, we removed the session, or this server is
       // shutting down and nobody would be left to run the grace timer): free the seat now.
-      if (
-        closing ||
-        reason === "client namespace disconnect" ||
-        reason === "server namespace disconnect"
-      ) {
+      if (closing || reason === "client namespace disconnect" || reason === "server namespace disconnect") {
         track(release());
         return;
       }
@@ -382,22 +327,14 @@ export function createSocketServer(httpServer: HttpServer) {
    */
   async function sweepGhostSeats() {
     for await (const roomId of roomStore.scanRoomIds()) {
-      const live = new Set(
-        (await io.in(roomChannel(roomId)).fetchSockets()).map((s) => s.id),
-      );
+      const live = new Set((await io.in(roomChannel(roomId)).fetchSockets()).map((s) => s.id));
       for (const m of await roomStore.listMembers(roomId)) {
         const ghostKey = `ghost:${roomId}:${m.id}`;
         if (live.has(m.socketId)) {
           await redis.del(ghostKey);
           continue;
         }
-        const firstSighting = await redis.set(
-          ghostKey,
-          m.socketId,
-          "EX",
-          180,
-          "NX",
-        );
+        const firstSighting = await redis.set(ghostKey, m.socketId, "EX", 180, "NX");
         if (firstSighting === "OK") continue;
         if ((await redis.get(ghostKey)) === m.socketId) {
           await redis.del(ghostKey);
@@ -407,9 +344,7 @@ export function createSocketServer(httpServer: HttpServer) {
     }
   }
   const sweeper = setInterval(() => {
-    sweepGhostSeats().catch((err) =>
-      console.error("ghost seat sweep failed", err),
-    );
+    sweepGhostSeats().catch((err) => console.error("ghost seat sweep failed", err));
   }, 30_000);
   sweeper.unref();
 

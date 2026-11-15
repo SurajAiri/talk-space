@@ -380,18 +380,58 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       endSession('The host removed you from this room.')
     })
 
+    // Never let two retry timers race each other.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    const stopRetry = () => {
+      if (retryTimer) clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    // socket.io retries on its own after a dropped connection, but gives up for good when the server
+    // refuses the handshake or closes it deliberately. Then WE have to knock again.
+    const retryLater = (ms: number) => {
+      stopRetry()
+      retryTimer = setTimeout(() => {
+        retryTimer = null
+        if (get().status === 'reconnecting' && !s.connected && !s.active) s.connect()
+      }, ms)
+    }
+
     s.on('disconnect', (reason: string) => {
-      if (reason === 'io client disconnect') return
+      if (reason === 'io client disconnect') return stopRetry()
       // Only the signaling connection dropped. The peer-to-peer links do not depend on it, so
       // they stay up: voice and chat keep working while socket.io reconnects and we re-join.
       // The server holds our seat for a short grace period.
       if (get().status === 'joined') set({ status: 'reconnecting' })
+      // 'io server disconnect': the server closed it and socket.io will NOT retry by itself
+      if (reason === 'io server disconnect') retryLater(1000)
+    })
+
+    // Fires on every failed attempt. Failures that socket.io retries by itself (server down, no network)
+    // need nothing from us; refusals do.
+    s.on('connect_error', (err: Error) => {
+      if (get().status !== 'reconnecting') return
+      const msg = err.message
+      // the token is no longer valid, or the account was suspended: retrying can never work
+      if (msg === 'UNAUTHORIZED' || msg.startsWith('ACCOUNT_')) {
+        return endSession(
+          msg === 'UNAUTHORIZED'
+            ? 'Your sign-in expired while you were disconnected. Sign in again to rejoin.'
+            : 'Your account cannot join rooms right now.',
+        )
+      }
+      // refused for another reason (e.g. the API is up but its database is still starting): try again
+      if (!s.active) retryLater(2000)
     })
 
     s.on('connect', async () => {
+      stopRetry()
       if (get().status !== 'reconnecting' || !joinParams) return
       const gen = generation
-      const ack = await emitJoin(s, joinParams)
+      // A flaky link can lose the first join: try a few times before giving up on the room
+      let ack = await emitJoin(s, joinParams)
+      for (let i = 0; i < 2 && !ack.ok && ack.code === 'TIMEOUT' && gen === generation && s.connected; i++) {
+        ack = await emitJoin(s, joinParams)
+      }
       if (gen !== generation) return
       if (!ack.ok) return endSession(`Couldn't rejoin the room: ${ack.message}`)
       if (ack.resumed) resumeNetwork(ack)
