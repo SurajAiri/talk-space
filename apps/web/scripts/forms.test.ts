@@ -15,7 +15,9 @@ test('usernames are cleaned as typed and checked against the same rule as the se
   assert.equal(normalizeUsername('Maya Chen!'), 'mayachen')
   assert.equal(normalizeUsername('a'.repeat(40)).length, 20)
   assert.equal(validateUsername(''), 'Pick a username')
-  assert.equal(validateUsername('ab'), 'At least 3 characters')
+  assert.equal(validateUsername('ab'), 'At least 6 characters')
+  assert.equal(validateUsername('abcde'), 'At least 6 characters')
+  assert.equal(validateUsername('abcdef'), null)
   assert.equal(validateUsername('maya_c'), null)
 })
 

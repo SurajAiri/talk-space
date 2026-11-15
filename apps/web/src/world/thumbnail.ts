@@ -4,12 +4,14 @@
  */
 import { drawProp } from './assets/props.ts'
 import { drawTile } from './assets/tiles.ts'
+import { drawNight, nightPropsOf } from './render/scene.ts'
 import { TILE, type WorldMap } from './types.ts'
 
 const cache = new Map<string, string>()
 
 export function mapThumbnail(map: WorldMap, width = 320): string | null {
-  const hit = cache.get(map.key)
+  const cacheKey = `${map.key}@${width}`
+  const hit = cache.get(cacheKey)
   if (hit) return hit
   if (typeof document === 'undefined') return null
 
@@ -32,7 +34,9 @@ export function mapThumbnail(map: WorldMap, width = 320): string | null {
   // back to front, so things in front overlap the things behind them
   for (const p of [...map.props].sort((a, b) => a.row + a.h - (b.row + b.h))) drawProp(g, p, 0)
 
+  drawNight(g, nightPropsOf(map.props), 0)
+
   const url = canvas.toDataURL('image/png')
-  cache.set(map.key, url)
+  cache.set(cacheKey, url)
   return url
 }

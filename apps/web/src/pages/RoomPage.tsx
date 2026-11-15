@@ -10,6 +10,7 @@ import ChatWindow from '../components/room/ChatWindow'
 import FloatPanel from '../components/room/FloatPanel'
 import HearingChip from '../components/room/HearingChip'
 import Joystick from '../components/room/Joystick'
+import MiniMap from '../components/room/MiniMap'
 import MessageTiles from '../components/room/MessageTiles'
 import RoomTopBar from '../components/room/RoomTopBar'
 import WorldView from '../components/WorldView'
@@ -341,6 +342,7 @@ function InRoom() {
           <HearingChip session={world} onClick={openPeople} />
         </div>
       )}
+      {world && <MiniMap session={world} />}
       {world && coarse && <Joystick session={world} />}
       <MoveHint coarse={coarse} />
 

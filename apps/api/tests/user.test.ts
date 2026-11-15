@@ -139,6 +139,10 @@ describe("editing the profile", () => {
 
     assert.equal((await patch(a.token, "no spaces!")).status, 400);
     assert.equal((await patch(a.token, "ab")).status, 400);
+    assert.equal((await patch(a.token, "abcde")).status, 400, "5 characters is below the minimum of 6");
+    assert.equal((await patch(a.token, "admin_99")).status, 400, "reserved");
+    assert.equal((await patch(a.token, "ds_staff")).status, 400, "reserved words are caught anywhere in the name");
+    assert.equal((await patch(a.token, "x_shit_x1")).status, 400, "foul language");
     assert.equal((await patch(a.token, b.username)).status, 409);
     // changing to your own current name is fine
     assert.equal((await patch(a.token, a.username)).status, 200);
@@ -147,6 +151,33 @@ describe("editing the profile", () => {
     const ok = await patch(a.token, fresh.toUpperCase()); // stored lower case
     assert.equal(ok.status, 200);
     assert.equal(ok.data.username, fresh);
+  });
+
+  test("staff can give out names the public cannot; nobody else can", async () => {
+    const staff = await makeUser();
+    const target = await makeUser();
+    const other = await makeUser();
+    await db.update(schema.users).set({ userType: "admin" }).where(eq(schema.users.id, staff.id));
+    const set = (token: string, id: string, username: string) =>
+      http(`/admin/users/${id}/username`, { method: "PATCH", token, body: { username } });
+
+    assert.equal((await set(target.token, target.id, "admin")).status, 403, "a normal account cannot use it");
+    const reserved = `admin_${Math.random().toString(36).slice(2, 6)}`; // contains "admin": the public cannot take this
+    assert.equal((await http("/users/me", { method: "PATCH", token: target.token, body: { username: reserved } })).status, 400);
+
+    const ok = await set(staff.token, target.id, reserved);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.data.username, reserved);
+    assert.equal((await set(staff.token, target.id, "ab")).status, 200, "short handles are fine for staff");
+    assert.equal((await set(staff.token, target.id, "a")).status, 400, "but not 1 character");
+    assert.equal((await set(staff.token, target.id, "bad name")).status, 400);
+    assert.equal((await set(staff.token, other.id, "ab")).status, 409, "uniqueness still applies");
+    assert.equal((await set(staff.token, "not-a-uuid", "abcdef")).status, 400);
+
+    // someone whose name predates the rules (here: 2 characters) can still edit the rest of their profile
+    const bio = await http("/users/me", { method: "PATCH", token: target.token, body: { bio: "still me" } });
+    assert.equal(bio.status, 200);
+    assert.equal(bio.data.username, "ab");
   });
 
   test("rejects an empty request, bad values, and ignores fields people may not change", async () => {

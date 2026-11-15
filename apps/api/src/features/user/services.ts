@@ -127,3 +127,19 @@ export async function revokeTokens(id: string) {
     .set({ tokenVersion: sql`${users.tokenVersion} + 1` })
     .where(eq(users.id, id));
 }
+
+/**
+ * Staff only (see features/admin/routes.ts): gives an account any username that fits the alphabet, skipping the
+ * reserved-word and length rules public sign-up has. This is how `admin`, short handles and approved paid names
+ * get set. Uniqueness still applies.
+ */
+export async function setUsernameAsStaff(id: string, username: string) {
+  try {
+    const [user] = await db.update(users).set({ username }).where(eq(users.id, id)).returning({ id: users.id, username: users.username });
+    if (!user) throw new AppError(404, "User not found");
+    return user;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new AppError(409, "Username already taken");
+    throw err;
+  }
+}

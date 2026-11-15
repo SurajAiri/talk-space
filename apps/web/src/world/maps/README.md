@@ -52,6 +52,15 @@ One entry in `assets/tiles.ts` (`TILESET`) or `assets/props.ts` (`PROP_CATALOG`)
 function. The editor palette, validator, CLI and file format pick it up automatically. Never reuse or
 renumber an existing tile `char`; old map files depend on it.
 
+### Night maps: light and things you walk under
+A prop can also declare, in its `PROP_CATALOG` entry:
+- `light(p, time, emit)`: pools of coloured light it throws (`emit({ x, y, r, rgb, a })`, world pixels).
+  They are added on top of the finished scene, so a dark tile under a lantern really gets brighter.
+- `overhead(g, p, time)`: drawn ABOVE people, for string lights and canopies.
+
+Keep the tiles dim and let the props carry the light (see the night-market pack: `market.map.json`).
+Daytime maps have no such props, so this layer costs them nothing.
+
 ## Notes
 - Map `key` = file name = what a room stores; keep `^[a-z0-9][a-z0-9_-]{0,31}$`. A room whose key
   has no matching file falls back to a plain voice/chat room.

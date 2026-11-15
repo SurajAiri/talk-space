@@ -4,7 +4,15 @@
  * The server stays the authority: nothing here is a security boundary.
  */
 
-export const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+export const USERNAME_MIN = 6
+export const USERNAME_MAX = 20
+export const USERNAME_RE = /^[a-z0-9_]{6,20}$/
+/**
+ * What the API answers (as a 400) when a name is too much like the team's or is foul: the same words for every
+ * reason, on purpose. Only the server knows the reserved and blocked words (they are not shipped to every browser),
+ * so the form learns about them on submit and shows this next to the username.
+ */
+export const USERNAME_UNAVAILABLE = 'That username isn’t available'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 export const PASSWORD_MIN = 8
@@ -20,12 +28,12 @@ export function validateName(v: string): string | null {
 
 /** What gets stored: lower case, only letters, digits and underscores. Used as the person types. */
 export function normalizeUsername(v: string): string {
-  return v.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)
+  return v.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, USERNAME_MAX)
 }
 
 export function validateUsername(v: string): string | null {
   if (!v) return 'Pick a username'
-  if (v.length < 3) return 'At least 3 characters'
+  if (v.length < USERNAME_MIN) return `At least ${USERNAME_MIN} characters`
   if (!USERNAME_RE.test(v)) return 'Letters, numbers and underscores only'
   return null
 }

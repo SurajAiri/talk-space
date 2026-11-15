@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isUsernameAllowed, USERNAME_MAX, USERNAME_MIN, USERNAME_UNAVAILABLE } from "../../config/username.config.js";
 
 const email = z.email("A valid email is required").trim().toLowerCase();
 
@@ -14,10 +15,20 @@ export const usernameField = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(
-    /^[a-z0-9_]{3,20}$/,
-    "Username must be 3-20 characters: letters, numbers or underscores",
-  );
+  .min(USERNAME_MIN, `Username must be at least ${USERNAME_MIN} characters`)
+  .max(USERNAME_MAX, `Username must be at most ${USERNAME_MAX} characters`)
+  .regex(/^[a-z0-9_]+$/, "Username can only use letters, numbers and underscores")
+  .refine(isUsernameAllowed, USERNAME_UNAVAILABLE);
+
+/**
+ * What our own team may give an account: same alphabet, but 2-20 characters and no reserved-word or language
+ * rules, so `admin`, `dev` or a short paid handle can be set. Only the admin routes use this one.
+ */
+export const staffUsernameField = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9_]{2,20}$/, "Username must be 2-20 characters: letters, numbers or underscores");
 
 /**
  * Agreeing is part of creating an account: a missing or false value is refused, so the server

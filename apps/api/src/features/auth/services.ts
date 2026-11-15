@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, sql } from "drizzle-orm";
 import { PRIVACY_POLICY_VERSION } from "../../config/legal.config.js";
+import { isUsernameAllowed } from "../../config/username.config.js";
 import { db } from "../../db/index.js";
 import { users } from "../../db/schema/index.js";
 import { signJWT } from "../../services/jwt.service.js";
@@ -147,13 +148,14 @@ export async function changePassword(userId: string, currentPassword: string, ne
   return withToken(updated);
 }
 
-// Username for Google users: derived from the email, made unique.
+// Username for Google users: derived from the email, made unique, and held to the same public rules as a
+// typed one (an address like admin@example.com or fuckyou@example.com must not turn into a reserved or foul name).
 async function generateUsername(email: string) {
-  const base =
-    email.split("@")[0]!.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 14) ||
-    "user";
+  const local = email.split("@")[0]!.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 14);
+  const base = local && isUsernameAllowed(local) ? local : "user";
   for (let i = 0; i < 10; i++) {
     const candidate = `${base}${randomBytes(4).toString("hex").slice(0, 5)}`;
+    if (!isUsernameAllowed(candidate)) continue;
     const [taken] = await db
       .select({ id: users.id })
       .from(users)
@@ -161,7 +163,7 @@ async function generateUsername(email: string) {
       .limit(1);
     if (!taken) return candidate;
   }
-  return `${base}${Date.now().toString(36)}`;
+  return `user${Date.now().toString(36)}`;
 }
 
 /**

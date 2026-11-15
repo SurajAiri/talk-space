@@ -32,7 +32,24 @@ export interface PropDef {
   /** internal types (seats) are created through their own list, not the props palette */
   hidden?: boolean
   draw: (g: CanvasRenderingContext2D, p: Prop, time: number) => void
+  /**
+   * Lamps, glowing signs, embers: calls `emit` once per pool of light this prop throws. The pools are added on
+   * top of the finished scene (render/scene.ts, drawNight), so a dark tile under a lantern really gets brighter.
+   */
+  light?: (p: Prop, time: number, emit: EmitLight) => void
+  /** Drawn ABOVE people, after the depth-sorted pass: string lights, canopies. Things you walk underneath. */
+  overhead?: (g: CanvasRenderingContext2D, p: Prop, time: number) => void
 }
+
+/** A soft pool of coloured light in world pixels. `rgb` is "r, g, b"; `a` is its strength, 0..1. */
+export interface Light {
+  x: number
+  y: number
+  r: number
+  rgb: string
+  a: number
+}
+export type EmitLight = (l: Light) => void
 
 function drawFountain(g: CanvasRenderingContext2D, p: Prop, time: number) {
   const x = p.col * TILE
@@ -1213,6 +1230,1031 @@ function drawSolarPanel(g: CanvasRenderingContext2D, p: Prop, time: number) {
 }
 
 
+// =============================================================================================
+// NIGHT MARKET PACK (Sky Night Market)
+// Everything here throws light (`light`) so the dark tiles around it glow; the string lights hang ABOVE
+// people (`overhead`). Static structure is baked once per prop, only steam, flames and sway are live.
+// =============================================================================================
+
+const TAU = Math.PI * 2
+const WARM = '255, 176, 92'
+
+/** A small bulb: a faint halo, the coloured glass and a white-hot core. */
+function bulb(g: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, a = 1) {
+  g.fillStyle = color
+  g.globalAlpha = 0.26 * a
+  g.beginPath()
+  g.arc(x, y, r * 2.7, 0, TAU)
+  g.fill()
+  g.globalAlpha = a
+  g.beginPath()
+  g.arc(x, y, r, 0, TAU)
+  g.fill()
+  g.fillStyle = '#fffbe8'
+  g.globalAlpha = 0.85 * a
+  g.beginPath()
+  g.arc(x, y, r * 0.45, 0, TAU)
+  g.fill()
+  g.globalAlpha = 1
+}
+
+/** `k` puffs of steam or smoke rising from (x, y) and fading as they go. */
+function steam(g: CanvasRenderingContext2D, x: number, y: number, t: number, k: number, rise: number, rgb = '255, 255, 255', a = 0.34) {
+  for (let i = 0; i < k; i++) {
+    const ph = (t * 0.0005 + i / k + noise(Math.floor(x), i, 5)) % 1
+    g.fillStyle = `rgba(${rgb}, ${(a * (1 - ph)).toFixed(3)})`
+    g.beginPath()
+    g.arc(x + Math.sin(ph * 7 + i * 2) * 3.2, y - ph * rise, 2.4 + ph * 5, 0, TAU)
+    g.fill()
+  }
+}
+
+// ---- market stalls -------------------------------------------------------------------------------------
+
+interface StallLook {
+  /** the two awning stripe colours */
+  a: string
+  b: string
+  /** the cloth hung under the counter, and its trim */
+  skirt: string
+  trim: string
+  /** colour of the light the goods throw ("r, g, b") */
+  glow: string
+  /** what is on the counter. x = left edge, by = the counter top, w = width (px) */
+  goods: (g: CanvasRenderingContext2D, x: number, by: number, w: number, t: number) => void
+}
+
+const STALLS: Record<string, StallLook> = {
+  noodles: {
+    a: '#d33a2c', b: '#f3e7d0', skirt: '#7d1d1a', trim: '#e9b14f', glow: '255, 200, 120',
+    goods(g, x, by, w, t) {
+      g.fillStyle = '#8b95a8'
+      g.fillRect(x + 10, by - 19, 28, 19)
+      g.fillStyle = '#c9d1de'
+      g.beginPath()
+      g.ellipse(x + 24, by - 19, 14, 5, 0, 0, TAU)
+      g.fill()
+      g.fillStyle = '#c98c4a'
+      g.beginPath()
+      g.ellipse(x + 24, by - 19, 11, 3.6, 0, 0, TAU)
+      g.fill()
+      steam(g, x + 24, by - 21, t, 3, 28)
+      for (let bx = x + 52; bx < x + w - 12; bx += 22) {
+        g.fillStyle = '#f2ece0'
+        g.beginPath()
+        g.arc(bx, by - 8, 9, 0, Math.PI)
+        g.fill()
+        g.fillStyle = '#d28a45'
+        g.beginPath()
+        g.ellipse(bx, by - 8, 9, 3, 0, 0, TAU)
+        g.fill()
+        g.fillStyle = '#d6402a'
+        g.fillRect(bx - 4, by - 9.6, 2.6, 2.4)
+        g.fillStyle = '#4cb86b'
+        g.fillRect(bx + 2, by - 9.4, 3.2, 2)
+        steam(g, bx, by - 11, t + bx * 20, 2, 14, '255, 255, 255', 0.26)
+      }
+    },
+  },
+  skewers: {
+    a: '#e8691f', b: '#3b2430', skirt: '#40242c', trim: '#f0a53c', glow: '255, 120, 50',
+    goods(g, x, by, w, t) {
+      g.fillStyle = '#231a22'
+      g.beginPath()
+      g.roundRect(x + 8, by - 11, w - 16, 11, 2)
+      g.fill()
+      for (let i = 0; i < Math.floor((w - 24) / 6); i++) {
+        const k = noise(i, Math.floor(x), 3)
+        g.globalAlpha = 0.55 + 0.45 * Math.sin(t * 0.008 + i * 1.9 + k * 6)
+        g.fillStyle = k > 0.5 ? '#ff7a2a' : '#ffb347'
+        g.fillRect(x + 12 + i * 6, by - 8, 4, 4)
+      }
+      g.globalAlpha = 1
+      for (let i = 0; i < Math.floor((w - 26) / 13); i++) {
+        const sx = x + 16 + i * 13
+        g.strokeStyle = '#d8b883'
+        g.lineWidth = 1.6
+        g.beginPath()
+        g.moveTo(sx - 6, by - 14)
+        g.lineTo(sx + 8, by - 20)
+        g.stroke()
+        g.fillStyle = '#8a4b26'
+        for (let m = 0; m < 3; m++) {
+          g.beginPath()
+          g.arc(sx - 2 + m * 4, by - 15.5 - m * 1.7, 2.7, 0, TAU)
+          g.fill()
+        }
+      }
+      steam(g, x + w * 0.5, by - 22, t, 3, 30, '190, 190, 205', 0.22)
+    },
+  },
+  sweets: {
+    a: '#ff7eb6', b: '#fff3e0', skirt: '#a8336a', trim: '#ffe08a', glow: '255, 150, 190',
+    goods(g, x, by, w) {
+      g.fillStyle = '#7a4a2c'
+      g.fillRect(x + 8, by - 8, w * 0.5, 8)
+      for (let i = 0; i < Math.floor((w * 0.5) / 10); i++) {
+        const sx = x + 14 + i * 10
+        g.strokeStyle = '#e8d3a0'
+        g.lineWidth = 1.5
+        g.beginPath()
+        g.moveTo(sx, by - 7)
+        g.lineTo(sx, by - 28)
+        g.stroke()
+        for (let f = 0; f < 3; f++) {
+          g.fillStyle = f % 2 ? '#e0332f' : '#c2271f'
+          g.beginPath()
+          g.arc(sx, by - 12 - f * 6, 3.8, 0, TAU)
+          g.fill()
+          g.fillStyle = 'rgba(255, 255, 255, 0.6)'
+          g.fillRect(sx - 1.8, by - 14 - f * 6, 1.6, 1.6)
+        }
+      }
+      for (let k = 0; k < 2; k++) {
+        const cx = x + w - 18 - k * 17
+        g.fillStyle = '#f5e6c8'
+        tri(g, cx - 4, by, cx + 4, by, cx, by - 12)
+        g.fillStyle = k ? '#8fd3ff' : '#ff9ec7'
+        g.beginPath()
+        g.arc(cx, by - 17, 7, 0, TAU)
+        g.arc(cx - 5, by - 14, 5, 0, TAU)
+        g.arc(cx + 5, by - 14, 5, 0, TAU)
+        g.fill()
+        g.fillStyle = 'rgba(255, 255, 255, 0.5)'
+        g.beginPath()
+        g.arc(cx - 2, by - 19, 2.4, 0, TAU)
+        g.fill()
+      }
+    },
+  },
+  tea: {
+    a: '#2aa58c', b: '#f3e7d0', skirt: '#1c5f55', trim: '#e9c46a', glow: '90, 235, 200',
+    goods(g, x, by, w, t) {
+      g.fillStyle = '#2f9e8f'
+      g.beginPath()
+      g.arc(x + 22, by - 10, 9.5, 0, TAU)
+      g.fill()
+      g.fillStyle = '#1f7569'
+      g.fillRect(x + 18, by - 21, 8, 3.4)
+      g.strokeStyle = '#2f9e8f'
+      g.lineWidth = 3
+      g.beginPath()
+      g.moveTo(x + 30, by - 13)
+      g.lineTo(x + 37, by - 19)
+      g.stroke()
+      g.beginPath()
+      g.arc(x + 11, by - 11, 5, Math.PI * 0.55, Math.PI * 1.5)
+      g.stroke()
+      steam(g, x + 22, by - 23, t, 3, 26)
+      for (let i = 0; i < 3; i++) {
+        g.fillStyle = '#f6f1e6'
+        g.beginPath()
+        g.arc(x + 48 + i * 11, by - 4, 5, 0, Math.PI)
+        g.fill()
+      }
+      for (let k = 0; k < 3; k++) {
+        const sy = by - 7 - k * 7
+        g.fillStyle = '#c99a58'
+        g.fillRect(x + w - 32, sy, 24, 7)
+        g.fillStyle = '#e2bd7c'
+        g.beginPath()
+        g.ellipse(x + w - 20, sy, 12, 3, 0, 0, TAU)
+        g.fill()
+      }
+      steam(g, x + w - 20, by - 28, t + 400, 2, 20, '255, 255, 255', 0.3)
+    },
+  },
+  toys: {
+    a: '#3a7bd5', b: '#ffd23f', skirt: '#223f7c', trim: '#ffd23f', glow: '170, 210, 255',
+    goods(g, x, by, w, t) {
+      for (let i = 0; i < 3; i++) {
+        const mx = x + 16 + i * ((w - 32) / 2)
+        g.fillStyle = '#f6f0e4'
+        g.beginPath()
+        g.arc(mx, by - 26, 8, 0, TAU)
+        g.fill()
+        g.fillStyle = i === 1 ? '#3a7bd5' : '#d6402a'
+        tri(g, mx - 7, by - 31, mx - 2, by - 31, mx - 6, by - 38)
+        tri(g, mx + 7, by - 31, mx + 2, by - 31, mx + 6, by - 38)
+        g.fillRect(mx - 5, by - 27, 3, 2.4)
+        g.fillRect(mx + 2, by - 27, 3, 2.4)
+        g.fillStyle = '#1b1226'
+        g.fillRect(mx - 1, by - 23, 2, 3)
+      }
+      const colors = ['#ff5a7a', '#42d6a4', '#ffd23f', '#6aa8ff'] as const
+      for (let i = 0; i < Math.min(3, Math.floor((w - 20) / 22)); i++) {
+        const px = x + 14 + i * 22 + 6
+        g.strokeStyle = '#d8c7a0'
+        g.lineWidth = 1.4
+        g.beginPath()
+        g.moveTo(px, by)
+        g.lineTo(px, by - 12)
+        g.stroke()
+        const a0 = t * 0.006 + i * 1.3
+        for (let b = 0; b < 4; b++) {
+          const a = a0 + (b * TAU) / 4
+          g.fillStyle = colors[(b + i) % 4]!
+          tri(g, px, by - 12, px + Math.cos(a) * 8, by - 12 + Math.sin(a) * 8, px + Math.cos(a + 0.9) * 6, by - 12 + Math.sin(a + 0.9) * 6)
+        }
+      }
+    },
+  },
+  fruit: {
+    a: '#3fa34d', b: '#fff0b0', skirt: '#2a6a33', trim: '#ffd86b', glow: '255, 210, 110',
+    goods(g, x, by, w) {
+      const fruit = ['#ff9a2a', '#e03a2c', '#d6336c', '#9bd94a'] as const
+      for (let i = 0; i < Math.floor((w - 12) / 24); i++) {
+        const cx = x + 8 + i * 24
+        g.fillStyle = '#8a5a2e'
+        g.fillRect(cx, by - 12, 22, 12)
+        g.fillStyle = '#5a3a1c'
+        g.fillRect(cx, by - 7, 22, 1.4)
+        for (let f = 0; f < 4; f++) {
+          g.fillStyle = fruit[(i + f) % 4]!
+          g.beginPath()
+          g.arc(cx + 4 + f * 5, by - 14 - (f % 2) * 2.4, 3.6, 0, TAU)
+          g.fill()
+          g.fillStyle = 'rgba(255, 255, 255, 0.4)'
+          g.fillRect(cx + 3 + f * 5, by - 16 - (f % 2) * 2.4, 1.4, 1.4)
+        }
+      }
+    },
+  },
+  fortune: {
+    a: '#7a4fc4', b: '#e9c46a', skirt: '#40286e', trim: '#e9c46a', glow: '120, 230, 255',
+    goods(g, x, by, w, t) {
+      const cx = x + w / 2
+      const pulse = 1 + Math.sin(t * 0.004) * 0.08
+      g.fillStyle = '#4a3a6a'
+      g.fillRect(cx - 8, by - 5, 16, 5)
+      const grad = g.createRadialGradient(cx - 2, by - 14, 1, cx, by - 12, 10 * pulse)
+      grad.addColorStop(0, '#e6fdff')
+      grad.addColorStop(0.5, '#69d4f2')
+      grad.addColorStop(1, '#2a7fb8')
+      g.fillStyle = grad
+      g.beginPath()
+      g.arc(cx, by - 12, 9 * pulse, 0, TAU)
+      g.fill()
+      for (let i = 0; i < 3; i++) {
+        g.save()
+        g.translate(x + 18 + i * 3, by - 5)
+        g.rotate(-0.5 + i * 0.4)
+        g.fillStyle = '#f6efe0'
+        g.fillRect(-4, -11, 8, 12)
+        g.fillStyle = '#c9a24a'
+        g.fillRect(-2.5, -9, 5, 1.6)
+        g.restore()
+      }
+      g.strokeStyle = '#8a5a2e'
+      g.lineWidth = 1.4
+      g.beginPath()
+      g.moveTo(x + w - 14, by)
+      g.lineTo(x + w - 14, by - 18)
+      g.stroke()
+      g.fillStyle = '#ff6a3a'
+      g.fillRect(x + w - 15, by - 19, 2, 2)
+      steam(g, x + w - 14, by - 20, t, 3, 24, '210, 200, 230', 0.28)
+    },
+  },
+  goldfish: {
+    a: '#18a5b8', b: '#f4fbff', skirt: '#0f6674', trim: '#bff3ff', glow: '100, 210, 255',
+    goods(g, x, by, w, t) {
+      const bw = w / 2 - 12
+      for (let i = 0; i < 2; i++) {
+        const bx = x + 8 + i * (w / 2 - 4)
+        g.fillStyle = '#e8f4ff'
+        g.beginPath()
+        g.roundRect(bx, by - 14, bw, 14, 5)
+        g.fill()
+        g.fillStyle = '#3aa9e6'
+        g.beginPath()
+        g.roundRect(bx + 2, by - 12.5, bw - 4, 10, 4)
+        g.fill()
+        for (let k = 0; k < 3; k++) {
+          const sw = Math.sin(t * 0.0013 * (k + 1) + i * 3 + k) * 0.5 + 0.5
+          const fx = bx + 6 + sw * Math.max(2, bw - 18)
+          const fy = by - 8 + Math.sin(t * 0.003 + k * 2 + i) * 1.8
+          const dir = Math.cos(t * 0.0013 * (k + 1) + i * 3 + k) > 0 ? 1 : -1
+          g.fillStyle = k === 1 ? '#ffd23f' : '#ff7a2a'
+          g.beginPath()
+          g.ellipse(fx, fy, 3.6, 2.2, 0, 0, TAU)
+          g.fill()
+          tri(g, fx - dir * 3, fy, fx - dir * 7, fy - 2.6, fx - dir * 7, fy + 2.6)
+        }
+      }
+      g.strokeStyle = '#d8c7a0'
+      g.lineWidth = 1.4
+      g.beginPath()
+      g.moveTo(x + w - 10, by)
+      g.lineTo(x + w - 10, by - 20)
+      g.stroke()
+      g.strokeStyle = '#f6efe0'
+      g.beginPath()
+      g.arc(x + w - 10, by - 24, 4.4, 0, TAU)
+      g.stroke()
+    },
+  },
+}
+
+function stallLook(p: Prop): StallLook {
+  return STALLS[p.variant ?? 'noodles'] ?? STALLS.noodles!
+}
+
+/** Everything about a stall that never moves: shadow, posts, counter, striped awning with scalloped edge. */
+function paintStall(g: CanvasRenderingContext2D, p: Prop) {
+  const look = stallLook(p)
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const W = p.w * TILE
+  shadow(g, x + W / 2, y + 2 * TILE - 7, W / 2 + 3, 6, 0.4)
+  g.fillStyle = '#150e22'
+  g.fillRect(x + 3, y + 22, W - 6, 46)
+  g.fillStyle = '#2a1d3c'
+  g.fillRect(x + 3, y + 45, W - 6, 3)
+  g.fillStyle = '#5a3a2a'
+  g.fillRect(x, y + 6, 6, 88)
+  g.fillRect(x + W - 6, y + 6, 6, 88)
+  g.fillStyle = 'rgba(255, 200, 150, 0.2)'
+  g.fillRect(x + 1, y + 6, 1.5, 88)
+  g.fillRect(x + W - 5, y + 6, 1.5, 88)
+  g.fillStyle = '#7b4a2b'
+  g.beginPath()
+  g.roundRect(x + 2, y + 64, W - 4, 11, 3)
+  g.fill()
+  g.fillStyle = 'rgba(255, 224, 176, 0.24)'
+  g.fillRect(x + 4, y + 65, W - 8, 2)
+  g.fillStyle = look.skirt
+  g.fillRect(x + 4, y + 75, W - 8, 18)
+  g.fillStyle = look.trim
+  g.fillRect(x + 4, y + 75, W - 8, 2.4)
+  g.fillRect(x + 4, y + 90.6, W - 8, 2.4)
+  g.fillStyle = 'rgba(255, 255, 255, 0.14)'
+  for (let dx = 11; dx < W - 11; dx += 14) {
+    g.beginPath()
+    g.moveTo(x + dx, y + 84)
+    g.lineTo(x + dx + 4, y + 80)
+    g.lineTo(x + dx + 8, y + 84)
+    g.lineTo(x + dx + 4, y + 88)
+    g.closePath()
+    g.fill()
+  }
+  const n = Math.max(2, Math.round(W / 15))
+  const sw = W / n
+  g.save()
+  g.beginPath()
+  g.moveTo(x + 5, y + 5)
+  g.lineTo(x + W - 5, y + 5)
+  g.lineTo(x + W, y + 31)
+  g.lineTo(x, y + 31)
+  g.closePath()
+  g.clip()
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = i % 2 ? look.b : look.a
+    g.fillRect(x + i * sw, y + 5, sw + 0.5, 27)
+  }
+  const shade = g.createLinearGradient(0, y + 5, 0, y + 31)
+  shade.addColorStop(0, 'rgba(10, 4, 24, 0.55)')
+  shade.addColorStop(0.55, 'rgba(10, 4, 24, 0.12)')
+  shade.addColorStop(1, 'rgba(255, 225, 170, 0.18)')
+  g.fillStyle = shade
+  g.fillRect(x, y + 5, W, 27)
+  g.restore()
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = i % 2 ? look.b : look.a
+    g.beginPath()
+    g.ellipse(x + (i + 0.5) * sw, y + 31, sw / 2, 7, 0, 0, Math.PI)
+    g.fill()
+    g.fillStyle = 'rgba(255, 225, 170, 0.14)'
+    g.fill()
+  }
+  g.fillStyle = 'rgba(255, 255, 255, 0.22)'
+  g.fillRect(x + 5, y + 5, W - 10, 1.6)
+}
+
+const paintStallBaked = bakedProp(paintStall, 10)
+
+function drawStall(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  paintStallBaked(g, p, time)
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const W = p.w * TILE
+  stallLook(p).goods(g, x, y + 64, W, time)
+  const n = Math.max(2, Math.round(W / 15))
+  for (let i = 0; i < n; i++) bulb(g, x + ((i + 0.5) * W) / n, y + 41, 2.1, '#ffe6a6', 0.78 + 0.22 * Math.sin(time * 0.004 + i * 1.7 + p.col))
+}
+
+function stallLight(p: Prop, t: number, emit: EmitLight) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const W = p.w * TILE
+  emit({ x: x + W / 2, y: y + TILE * 1.9, r: 80 + W * 0.5, rgb: WARM, a: 0.3 })
+  emit({ x: x + W / 2, y: y + 44, r: 44 + W * 0.28, rgb: stallLook(p).glow, a: 0.2 + 0.06 * Math.sin(t * 0.006 + p.col) })
+}
+
+// ---- lanterns on poles ---------------------------------------------------------------------------------
+
+const LANTERN_COLORS: Record<string, { body: string; edge: string; rgb: string }> = {
+  red: { body: '#ff6a3c', edge: '#8e1f15', rgb: '255, 96, 56' },
+  amber: { body: '#ffc44d', edge: '#9a5a12', rgb: '255, 186, 80' },
+  jade: { body: '#5cf0c4', edge: '#126a55', rgb: '70, 235, 190' },
+}
+
+function lanternColors(p: Prop) {
+  return LANTERN_COLORS[p.variant ?? 'red'] ?? LANTERN_COLORS.red!
+}
+
+/** One paper lantern hanging from (0, 0): ribbed body, dark caps, a tassel. Caller translates/rotates. */
+function paperLantern(g: CanvasRenderingContext2D, c: { body: string; edge: string }, s = 1) {
+  g.strokeStyle = '#2a1a1a'
+  g.lineWidth = 1.4
+  g.beginPath()
+  g.moveTo(0, 0)
+  g.lineTo(0, 5 * s)
+  g.stroke()
+  const grad = g.createRadialGradient(0, 15 * s, 1, 0, 15 * s, 14 * s)
+  grad.addColorStop(0, '#fff3c4')
+  grad.addColorStop(0.35, c.body)
+  grad.addColorStop(1, c.edge)
+  g.fillStyle = grad
+  g.beginPath()
+  g.ellipse(0, 15 * s, 10.5 * s, 12.5 * s, 0, 0, TAU)
+  g.fill()
+  g.strokeStyle = 'rgba(70, 10, 6, 0.4)'
+  g.lineWidth = 1
+  for (let i = -1; i <= 1; i++) {
+    g.beginPath()
+    g.ellipse(0, 15 * s, 10.5 * s, Math.abs(i) * 4 * s + 0.01, 0, 0, TAU)
+    if (i !== 0) g.stroke()
+  }
+  g.fillStyle = '#2b1713'
+  g.fillRect(-5 * s, 3 * s, 10 * s, 3 * s)
+  g.fillRect(-5 * s, 25.5 * s, 10 * s, 3 * s)
+  g.strokeStyle = '#f0b64a'
+  g.lineWidth = 1.2
+  g.beginPath()
+  g.moveTo(0, 28.5 * s)
+  g.lineTo(0, 34 * s)
+  g.stroke()
+  g.fillStyle = '#f0b64a'
+  g.fillRect(-1.6 * s, 33 * s, 3.2 * s, 5 * s)
+}
+
+function drawLanternPost(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const cx = x + TILE / 2
+  const c = lanternColors(p)
+  shadow(g, cx, y + 44, 15, 5, 0.4)
+  g.fillStyle = '#3b3566'
+  g.beginPath()
+  g.roundRect(cx - 9, y + 36, 18, 9, 3)
+  g.fill()
+  g.fillStyle = '#2b1c1c'
+  g.fillRect(cx - 2.5, y - 40, 5, 78)
+  g.fillRect(cx - 21, y - 37, 42, 4)
+  g.fillStyle = '#e6b45a'
+  g.beginPath()
+  g.arc(cx, y - 42, 3.4, 0, TAU)
+  g.fill()
+  for (const side of [-1, 1] as const) {
+    g.save()
+    g.translate(cx + side * 17, y - 33)
+    g.rotate(Math.sin(time * 0.0016 + p.col * 1.7 + side) * 0.07)
+    paperLantern(g, c, 0.95)
+    g.restore()
+  }
+}
+
+function lanternPostLight(p: Prop, t: number, emit: EmitLight) {
+  const cx = p.col * TILE + TILE / 2
+  const y = p.row * TILE
+  const c = lanternColors(p)
+  const f = 0.34 + 0.05 * Math.sin(t * 0.007 + p.col * 3 + p.row)
+  emit({ x: cx - 17, y: y - 16, r: 96, rgb: c.rgb, a: f })
+  emit({ x: cx + 17, y: y - 16, r: 96, rgb: c.rgb, a: f })
+  emit({ x: cx, y: y + 40, r: 86, rgb: WARM, a: 0.22 })
+}
+
+// ---- string lights (overhead) --------------------------------------------------------------------------
+
+const STRING_BULBS = ['#ffe3a0', '#ff8a5c', '#ffd36b', '#7cf0cf', '#ffe3a0', '#ff6f91'] as const
+const STRING_SPAN = 96
+
+/** Geometry shared by the wire and its light: where each hung segment starts, ends and sags. */
+function stringSegments(p: Prop) {
+  const vertical = p.h > p.w
+  const len = (vertical ? p.h : p.w) * TILE
+  const n = Math.max(1, Math.round(len / STRING_SPAN))
+  const sl = len / n
+  const at = (d: number) => (vertical ? { x: p.col * TILE + TILE / 2, y: p.row * TILE + d } : { x: p.col * TILE + d, y: p.row * TILE + TILE / 2 })
+  return Array.from({ length: n }, (_, i) => {
+    const a = at(i * sl)
+    const b = at((i + 1) * sl)
+    const sag = 9 + noise(p.col + i, p.row, 5) * 6
+    // a quadratic curve whose control point is 2*sag away drops exactly `sag` at its middle
+    const c = vertical ? { x: (a.x + b.x) / 2 + sag * 2, y: (a.y + b.y) / 2 } : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + sag * 2 }
+    return { a, b, c, i }
+  })
+}
+
+function drawStringLights(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  g.lineCap = 'round'
+  for (const s of stringSegments(p)) {
+    g.strokeStyle = 'rgba(16, 10, 26, 0.9)'
+    g.lineWidth = 1.5
+    g.beginPath()
+    g.moveTo(s.a.x, s.a.y)
+    g.quadraticCurveTo(s.c.x, s.c.y, s.b.x, s.b.y)
+    g.stroke()
+    g.fillStyle = '#2b1c1c'
+    g.beginPath()
+    g.arc(s.a.x, s.a.y, 2.6, 0, TAU)
+    g.fill()
+    for (let k = 1; k <= 3; k++) {
+      const u = k / 4
+      const bx = (1 - u) * (1 - u) * s.a.x + 2 * (1 - u) * u * s.c.x + u * u * s.b.x
+      const by = (1 - u) * (1 - u) * s.a.y + 2 * (1 - u) * u * s.c.y + u * u * s.b.y
+      const idx = s.i * 3 + k + p.col
+      bulb(g, bx, by + 2.5, 2.2, STRING_BULBS[idx % STRING_BULBS.length]!, 0.72 + 0.28 * Math.sin(time * 0.004 + idx * 1.7))
+    }
+  }
+}
+
+function stringLightsLight(p: Prop, t: number, emit: EmitLight) {
+  for (const s of stringSegments(p)) {
+    const mx = 0.25 * s.a.x + 0.5 * s.c.x + 0.25 * s.b.x
+    const my = 0.25 * s.a.y + 0.5 * s.c.y + 0.25 * s.b.y
+    emit({ x: mx, y: my + 8, r: 64, rgb: WARM, a: 0.2 + 0.03 * Math.sin(t * 0.004 + s.i) })
+  }
+}
+
+// ---- neon signs ----------------------------------------------------------------------------------------
+
+const NEON: Record<string, { color: string; rgb: string; path: (g: CanvasRenderingContext2D, cx: number, cy: number) => void }> = {
+  bowl: {
+    color: '#ff5a7a', rgb: '255, 90, 122',
+    path(g, cx, cy) {
+      g.beginPath()
+      g.arc(cx, cy - 2, 13, 0, Math.PI)
+      g.closePath()
+      for (const dx of [-6, 0, 6]) {
+        g.moveTo(cx + dx, cy - 8)
+        g.quadraticCurveTo(cx + dx - 3, cy - 12, cx + dx, cy - 15)
+      }
+    },
+  },
+  fish: {
+    color: '#ffb347', rgb: '255, 179, 71',
+    path(g, cx, cy) {
+      g.beginPath()
+      g.ellipse(cx - 3, cy, 12, 7, 0, 0, TAU)
+      g.moveTo(cx + 8, cy)
+      g.lineTo(cx + 17, cy - 7)
+      g.lineTo(cx + 17, cy + 7)
+      g.closePath()
+      g.moveTo(cx - 10, cy - 1.5)
+      g.arc(cx - 10, cy - 1.5, 0.6, 0, TAU)
+    },
+  },
+  cup: {
+    color: '#2de2b0', rgb: '45, 226, 176',
+    path(g, cx, cy) {
+      g.beginPath()
+      g.roundRect(cx - 10, cy - 4, 18, 14, 4)
+      g.moveTo(cx + 8, cy)
+      g.arc(cx + 11, cy + 3, 5, -Math.PI / 2, Math.PI / 2)
+      for (const dx of [-5, 1]) {
+        g.moveTo(cx + dx, cy - 8)
+        g.quadraticCurveTo(cx + dx - 3, cy - 12, cx + dx, cy - 15)
+      }
+    },
+  },
+  moon: {
+    color: '#ffe27a', rgb: '255, 226, 122',
+    path(g, cx, cy) {
+      g.beginPath()
+      g.arc(cx, cy, 12, Math.PI * 0.62, Math.PI * 1.38, true)
+      g.arc(cx + 5, cy, 9.4, Math.PI * 1.3, Math.PI * 0.7, false)
+    },
+  },
+  star: {
+    color: '#8ab4ff', rgb: '138, 180, 255',
+    path(g, cx, cy) {
+      g.beginPath()
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5
+        const rr = i % 2 ? 6 : 14
+        if (i === 0) g.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr)
+        else g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr)
+      }
+      g.closePath()
+    },
+  },
+}
+
+/** Neon flickers now and then: a brief dip, same moment for every frame inside the same 180 ms. */
+function neonLevel(p: Prop, t: number): number {
+  return noise(Math.floor(t / 180), p.col * 3 + p.row, 9) > 0.93 ? 0.4 : 1
+}
+
+function drawNeonSign(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  const neon = NEON[p.variant ?? 'bowl'] ?? NEON.bowl!
+  const x = p.col * TILE
+  const y = p.row * TILE
+  g.fillStyle = '#120d22'
+  g.beginPath()
+  g.roundRect(x + 4, y + 5, p.w * TILE - 8, TILE - 12, 7)
+  g.fill()
+  g.strokeStyle = '#3f2e5e'
+  g.lineWidth = 2
+  g.stroke()
+  const f = neonLevel(p, time)
+  const cx = x + (p.w * TILE) / 2
+  const cy = y + TILE / 2 - 1
+  g.lineCap = 'round'
+  g.lineJoin = 'round'
+  g.strokeStyle = neon.color
+  for (const [w, a] of [[8, 0.14], [4.5, 0.3], [2, 1]] as const) {
+    g.globalAlpha = a * f
+    g.lineWidth = w
+    neon.path(g, cx, cy)
+    g.stroke()
+  }
+  g.globalAlpha = 0.75 * f
+  g.strokeStyle = '#ffffff'
+  g.lineWidth = 0.7
+  neon.path(g, cx, cy)
+  g.stroke()
+  g.globalAlpha = 1
+}
+
+function neonLight(p: Prop, t: number, emit: EmitLight) {
+  const neon = NEON[p.variant ?? 'bowl'] ?? NEON.bowl!
+  emit({ x: p.col * TILE + (p.w * TILE) / 2, y: p.row * TILE + TILE / 2 + 10, r: 86, rgb: neon.rgb, a: 0.26 * neonLevel(p, t) })
+}
+
+// ---- the wishing tree ----------------------------------------------------------------------------------
+
+function drawWishingTree(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const cx = x + (p.w * TILE) / 2
+  const baseY = y + p.h * TILE - 12
+  shadow(g, cx, baseY + 4, 70, 18, 0.45)
+  g.fillStyle = '#3b3566'
+  g.beginPath()
+  g.ellipse(cx, baseY, 62, 19, 0, 0, TAU)
+  g.fill()
+  g.fillStyle = '#524a8c'
+  g.beginPath()
+  g.ellipse(cx, baseY - 4, 62, 17, 0, Math.PI, TAU)
+  g.fill()
+  g.fillStyle = '#1b1226'
+  g.beginPath()
+  g.ellipse(cx, baseY - 3, 52, 13, 0, 0, TAU)
+  g.fill()
+  // trunk and two limbs
+  g.strokeStyle = '#3d2530'
+  g.lineCap = 'round'
+  g.lineWidth = 17
+  g.beginPath()
+  g.moveTo(cx, baseY - 2)
+  g.quadraticCurveTo(cx - 4, baseY - 44, cx, baseY - 84)
+  g.stroke()
+  g.lineWidth = 8
+  g.beginPath()
+  g.moveTo(cx, baseY - 60)
+  g.quadraticCurveTo(cx - 28, baseY - 78, cx - 50, baseY - 112)
+  g.moveTo(cx, baseY - 66)
+  g.quadraticCurveTo(cx + 30, baseY - 82, cx + 52, baseY - 114)
+  g.stroke()
+  g.strokeStyle = 'rgba(255, 200, 160, 0.16)'
+  g.lineWidth = 3
+  g.beginPath()
+  g.moveTo(cx - 5, baseY - 4)
+  g.quadraticCurveTo(cx - 9, baseY - 44, cx - 5, baseY - 80)
+  g.stroke()
+  // blossom canopy
+  const bloom = ['#7d2f73', '#a63d87', '#cf5fa9', '#e58ac4'] as const
+  for (let i = 0; i < 46; i++) {
+    const a = noise(p.col, i, 1) * TAU
+    const d = Math.sqrt(noise(p.col, i, 2))
+    const bx = cx + Math.cos(a) * d * 86 + Math.sin(time * 0.0012 + i) * 1.6
+    const by = baseY - 122 + Math.sin(a) * d * 44
+    g.fillStyle = bloom[Math.floor(noise(p.col, i, 3) * 4)]!
+    g.beginPath()
+    g.arc(bx, by, 17 + noise(p.col, i, 4) * 13, 0, TAU)
+    g.fill()
+  }
+  g.fillStyle = 'rgba(255, 220, 240, 0.16)'
+  for (let i = 0; i < 9; i++) {
+    g.beginPath()
+    g.arc(cx - 50 + noise(p.col, i, 8) * 70, baseY - 140 + noise(p.col, i, 9) * 20, 9 + noise(p.col, i, 10) * 6, 0, TAU)
+    g.fill()
+  }
+  // wishes: paper lanterns and tags on strings, swaying
+  for (let i = 0; i < 24; i++) {
+    const a = noise(p.col, i, 21) * 2 - 1
+    const ax = cx + a * 74
+    const ay = baseY - 112 + Math.abs(a) * 26 + noise(p.col, i, 22) * 8
+    const len = 14 + noise(p.col, i, 23) * 28
+    const sway = Math.sin(time * 0.0018 + i * 1.9) * 3
+    g.strokeStyle = 'rgba(255, 230, 200, 0.55)'
+    g.lineWidth = 0.9
+    g.beginPath()
+    g.moveTo(ax, ay)
+    g.lineTo(ax + sway, ay + len)
+    g.stroke()
+    if (i % 3 === 0) {
+      g.fillStyle = '#f6ecd6'
+      g.fillRect(ax + sway - 2.6, ay + len, 5.2, 10)
+      g.fillStyle = '#c7372a'
+      g.fillRect(ax + sway - 2.6, ay + len, 5.2, 2)
+    } else {
+      bulb(g, ax + sway, ay + len + 3, 2.6, i % 3 === 1 ? '#ffc44d' : '#ff7a4a', 0.95)
+    }
+  }
+  // falling petals
+  g.fillStyle = '#ffc3e3'
+  for (let i = 0; i < 9; i++) {
+    const ph = (time * 0.00018 + i / 9 + noise(p.col, i, 31)) % 1
+    g.globalAlpha = 0.85 * (1 - ph)
+    g.beginPath()
+    g.ellipse(cx + (noise(p.col, i, 32) * 2 - 1) * 84 + Math.sin(ph * 9 + i) * 11, baseY - 104 + ph * 118, 3, 1.8, ph * 6, 0, TAU)
+    g.fill()
+  }
+  g.globalAlpha = 1
+}
+
+function wishingTreeLight(p: Prop, t: number, emit: EmitLight) {
+  const cx = p.col * TILE + (p.w * TILE) / 2
+  const baseY = p.row * TILE + p.h * TILE - 12
+  const s = 0.04 * Math.sin(t * 0.002)
+  emit({ x: cx, y: baseY - 100, r: 190, rgb: '255, 130, 190', a: 0.24 + s })
+  emit({ x: cx, y: baseY - 60, r: 140, rgb: WARM, a: 0.24 - s })
+  emit({ x: cx, y: baseY, r: 120, rgb: WARM, a: 0.2 })
+}
+
+// ---- tables, crates, floating lanterns, pillars, banners ------------------------------------------------
+
+function paintNightTable(g: CanvasRenderingContext2D, p: Prop) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const W = p.w * TILE
+  shadow(g, x + W / 2, y + TILE - 6, W / 2, 5, 0.4)
+  g.fillStyle = '#a5683c'
+  g.beginPath()
+  g.roundRect(x + 3, y + 9, W - 6, TILE - 19, 6)
+  g.fill()
+  g.fillStyle = '#3a2119'
+  g.beginPath()
+  g.roundRect(x + 5.5, y + 11.5, W - 11, TILE - 24, 4)
+  g.fill()
+  g.fillStyle = '#9d2f28'
+  g.fillRect(x + 8, y + 18, W - 16, 8)
+  g.fillStyle = '#e6b45a'
+  g.fillRect(x + 8, y + 18, W - 16, 1.4)
+  g.fillRect(x + 8, y + 24.6, W - 16, 1.4)
+  for (let i = 0; i < p.w; i++) {
+    const bx = x + i * TILE + (p.w === 1 ? TILE / 2 : i % 2 ? 36 : 12)
+    g.fillStyle = '#f2ece0'
+    g.beginPath()
+    g.arc(bx, y + 22, 6.4, 0, TAU)
+    g.fill()
+    g.fillStyle = '#c98c4a'
+    g.beginPath()
+    g.arc(bx, y + 22, 4.6, 0, TAU)
+    g.fill()
+    g.strokeStyle = '#d8c7a0'
+    g.lineWidth = 1
+    g.beginPath()
+    g.moveTo(bx + 5, y + 14)
+    g.lineTo(bx + 9, y + 26)
+    g.moveTo(bx + 7.5, y + 14)
+    g.lineTo(bx + 11.5, y + 26)
+    g.stroke()
+  }
+}
+
+const paintNightTableBaked = bakedProp(paintNightTable, 4)
+
+function drawNightTable(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  paintNightTableBaked(g, p, time)
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const W = p.w * TILE
+  const f = 0.85 + 0.15 * Math.sin(time * 0.009 + p.col * 2.3)
+  bulb(g, x + W / 2, y + 20, 2.8, '#ffb347', f)
+  steam(g, x + 12, y + 18, time + p.col * 90, 1, 12, '255, 255, 255', 0.2)
+}
+
+function nightTableLight(p: Prop, t: number, emit: EmitLight) {
+  emit({ x: p.col * TILE + (p.w * TILE) / 2, y: p.row * TILE + 22, r: 54 + p.w * 10, rgb: WARM, a: 0.2 + 0.03 * Math.sin(t * 0.009 + p.col) })
+}
+
+function drawCrates(g: CanvasRenderingContext2D, p: Prop) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const cx = x + TILE / 2
+  shadow(g, cx, y + 44, 21, 6, 0.4)
+  const v = p.variant ?? 'crates'
+  if (v === 'barrels') {
+    for (const [bx, s] of [[cx - 8, 1], [cx + 11, 0.8]] as const) {
+      g.fillStyle = '#5b3a24'
+      g.beginPath()
+      g.roundRect(bx - 12 * s, y + 46 - 36 * s, 24 * s, 36 * s, 8)
+      g.fill()
+      g.fillStyle = '#2b2b35'
+      g.fillRect(bx - 12 * s, y + 46 - 28 * s, 24 * s, 2.4)
+      g.fillRect(bx - 12 * s, y + 46 - 11 * s, 24 * s, 2.4)
+      g.fillStyle = '#7a4f32'
+      g.beginPath()
+      g.ellipse(bx, y + 46 - 36 * s + 2, 11 * s, 4, 0, 0, TAU)
+      g.fill()
+      g.fillStyle = 'rgba(255, 210, 160, 0.16)'
+      g.fillRect(bx - 8 * s, y + 46 - 32 * s, 2, 26 * s)
+    }
+  } else if (v === 'baskets') {
+    for (const [bx, by, r, col] of [[cx - 9, y + 32, 13, '#b88a4a'], [cx + 12, y + 38, 9.5, '#a97a3c']] as const) {
+      g.fillStyle = col
+      g.beginPath()
+      g.arc(bx, by, r, 0, TAU)
+      g.fill()
+      g.strokeStyle = 'rgba(70, 40, 10, 0.45)'
+      g.lineWidth = 1
+      for (let i = -2; i <= 2; i++) {
+        g.beginPath()
+        g.moveTo(bx + i * 4.5, by - r)
+        g.lineTo(bx + i * 4.5, by + r)
+        g.stroke()
+      }
+      g.fillStyle = '#d6402a'
+      for (let i = 0; i < 5; i++) {
+        g.beginPath()
+        g.arc(bx - r * 0.6 + i * (r * 0.3), by - r * 0.4 + (i % 2) * 3, 2.6, 0, TAU)
+        g.fill()
+      }
+    }
+  } else {
+    g.fillStyle = '#7d4f2a'
+    g.fillRect(cx - 18, y + 24, 36, 22)
+    g.fillStyle = '#5a3a1c'
+    g.fillRect(cx - 18, y + 33, 36, 1.6)
+    g.fillRect(cx - 18, y + 24, 3.4, 22)
+    g.fillRect(cx + 14.6, y + 24, 3.4, 22)
+    g.fillStyle = '#946036'
+    g.fillRect(cx - 12, y + 6, 26, 18)
+    g.fillStyle = '#5a3a1c'
+    g.fillRect(cx - 12, y + 14, 26, 1.6)
+    g.fillStyle = '#ff9a2a'
+    for (let i = 0; i < 4; i++) {
+      g.beginPath()
+      g.arc(cx - 8 + i * 7, y + 5 - (i % 2) * 2, 4, 0, TAU)
+      g.fill()
+    }
+  }
+}
+
+const POND_LANTERNS = ['255, 190, 90', '255, 100, 70', '255, 140, 200', '90, 235, 200'] as const
+const pondColor = (p: Prop) => POND_LANTERNS[Math.floor(noise(p.col, p.row, 61) * 4)]!
+
+/** Where a floating lantern is right now (px). Ponds bob in place; sky lanterns rise, fading in and out. */
+function floaterState(p: Prop, t: number) {
+  const x = p.col * TILE + TILE / 2
+  const y = p.row * TILE + TILE / 2
+  if (p.variant === 'sky') {
+    const ph = (t * 0.00007 + noise(p.col, p.row, 62)) % 1
+    return { x: x + Math.sin(ph * 5 + p.col) * 9, y: y + 10 - ph * TILE * 5, fade: Math.sin(ph * Math.PI) ** 0.6 }
+  }
+  return { x: x + Math.sin(t * 0.0009 + p.col * 2) * 3.4, y: y + Math.sin(t * 0.0012 + p.row * 3) * 2.4, fade: 1 }
+}
+
+function drawFloatingLantern(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  const s = floaterState(p, time)
+  if (p.variant === 'sky') {
+    g.globalAlpha = s.fade
+    g.fillStyle = '#ffb347'
+    g.globalAlpha = 0.2 * s.fade
+    g.beginPath()
+    g.arc(s.x, s.y, 22, 0, TAU)
+    g.fill()
+    g.globalAlpha = s.fade
+    const grad = g.createLinearGradient(s.x, s.y - 11, s.x, s.y + 11)
+    grad.addColorStop(0, '#ffe9a8')
+    grad.addColorStop(1, '#ff9a3c')
+    g.fillStyle = grad
+    g.beginPath()
+    g.moveTo(s.x - 8, s.y - 10)
+    g.lineTo(s.x + 8, s.y - 10)
+    g.lineTo(s.x + 6, s.y + 10)
+    g.lineTo(s.x - 6, s.y + 10)
+    g.closePath()
+    g.fill()
+    g.fillStyle = '#7a3a14'
+    g.fillRect(s.x - 8, s.y - 11, 16, 2.4)
+    g.fillRect(s.x - 6, s.y + 9, 12, 2.4)
+    g.fillStyle = '#fff6d0'
+    g.beginPath()
+    g.arc(s.x, s.y + 8, 2.6, 0, TAU)
+    g.fill()
+    g.globalAlpha = 1
+    return
+  }
+  const rgb = pondColor(p)
+  const ring = (time * 0.0006 + noise(p.col, p.row, 63)) % 1
+  g.strokeStyle = `rgba(${rgb}, ${(0.3 * (1 - ring)).toFixed(3)})`
+  g.lineWidth = 1.2
+  g.beginPath()
+  g.ellipse(s.x, s.y + 3, 8 + ring * 14, 3 + ring * 5, 0, 0, TAU)
+  g.stroke()
+  g.fillStyle = '#3a1f1a'
+  g.beginPath()
+  g.ellipse(s.x, s.y + 3, 8, 3.4, 0, 0, TAU)
+  g.fill()
+  g.fillStyle = `rgb(${rgb})`
+  g.beginPath()
+  g.ellipse(s.x, s.y, 6.4, 5.6, 0, Math.PI, TAU)
+  g.fill()
+  g.fillStyle = '#fffbe8'
+  g.globalAlpha = 0.85
+  g.beginPath()
+  g.arc(s.x, s.y - 0.5, 2.4, 0, TAU)
+  g.fill()
+  g.globalAlpha = 1
+}
+
+function floatingLanternLight(p: Prop, t: number, emit: EmitLight) {
+  const s = floaterState(p, t)
+  if (p.variant === 'sky') emit({ x: s.x, y: s.y, r: 96, rgb: '255, 176, 80', a: 0.4 * s.fade })
+  else emit({ x: s.x, y: s.y, r: 52, rgb: pondColor(p), a: 0.34 + 0.05 * Math.sin(t * 0.004 + p.col) })
+}
+
+function drawPillar(g: CanvasRenderingContext2D, p: Prop) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const cx = x + TILE / 2
+  shadow(g, cx, y + 44, 17, 6, 0.4)
+  g.fillStyle = '#3a3252'
+  g.beginPath()
+  g.roundRect(cx - 14, y + 33, 28, 12, 3)
+  g.fill()
+  g.fillStyle = '#524a78'
+  g.fillRect(cx - 14, y + 33, 28, 2.4)
+  const shaft = g.createLinearGradient(cx - 9, 0, cx + 9, 0)
+  shaft.addColorStop(0, '#5e1a15')
+  shaft.addColorStop(0.45, '#d23a2c')
+  shaft.addColorStop(1, '#6b1d17')
+  g.fillStyle = shaft
+  g.fillRect(cx - 9, y - 40, 18, 76)
+  g.fillStyle = '#d6a84a'
+  g.fillRect(cx - 10, y - 36, 20, 4)
+  g.fillRect(cx - 10, y + 28, 20, 4)
+  g.fillStyle = '#3a1c1a'
+  g.beginPath()
+  g.roundRect(cx - 15, y - 48, 30, 10, 3)
+  g.fill()
+  g.fillStyle = '#d6a84a'
+  g.fillRect(cx - 15, y - 40, 30, 2)
+}
+
+const NOBORI: Record<string, { cloth: string; mark: string }> = {
+  red: { cloth: '#d33a2c', mark: '#fff3dc' },
+  teal: { cloth: '#1fa68f', mark: '#f6f1e2' },
+  gold: { cloth: '#e9b030', mark: '#3a1c1a' },
+}
+
+function drawNobori(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  const x = p.col * TILE
+  const y = p.row * TILE
+  const cx = x + 14
+  const c = NOBORI[p.variant ?? 'red'] ?? NOBORI.red!
+  shadow(g, cx + 6, y + 44, 14, 5, 0.38)
+  g.fillStyle = '#3b3566'
+  g.beginPath()
+  g.ellipse(cx, y + 42, 10, 4, 0, 0, TAU)
+  g.fill()
+  g.fillStyle = '#2b1c1c'
+  g.fillRect(cx - 1.5, y - 46, 3, 90)
+  g.fillStyle = '#e6b45a'
+  g.beginPath()
+  g.arc(cx, y - 47, 3, 0, TAU)
+  g.fill()
+  g.fillRect(cx - 1, y - 44, 22, 2.4)
+  for (let i = 0; i < 22; i++) {
+    const wave = Math.sin(time * 0.004 + i * 0.5 + p.col) * (0.8 + i * 0.12)
+    g.fillStyle = c.cloth
+    g.fillRect(cx + 1.5 + wave, y - 42 + i * 3, 17, 3.2)
+    if (i === 5 || i === 6 || i === 7 || i === 8) {
+      g.fillStyle = c.mark
+      g.fillRect(cx + 5.5 + wave, y - 42 + i * 3, 9, 3.2)
+    }
+    if (i === 15 || i === 17) {
+      g.fillStyle = c.mark
+      g.fillRect(cx + 3 + wave, y - 42 + i * 3, 14, 1.6)
+    }
+  }
+}
+
 export const PROP_CATALOG: readonly PropDef[] = [
   { type: 'tree', label: 'Tree', w: 1, h: 1, solid: true, resize: 'none', variants: ['oak', 'sakura'], draw: drawTree },
   { type: 'plant', label: 'Potted plant', w: 1, h: 1, solid: true, resize: 'none', draw: drawPlant },
@@ -1251,6 +2293,17 @@ export const PROP_CATALOG: readonly PropDef[] = [
   { type: 'reactor', label: 'Reactor core', w: 3, h: 3, solid: true, resize: 'none', color: '#38bdf8', draw: drawReactor },
   { type: 'telescope', label: 'Telescope', w: 1, h: 1, solid: true, resize: 'none', draw: drawTelescope },
   { type: 'solar_panel', label: 'Solar panel', w: 3, h: 2, solid: true, resize: 'wh', minW: 1, minH: 1, draw: drawSolarPanel },
+  // ---- night market pack (appended; existing types never change) ----
+  { type: 'stall', label: 'Market stall', w: 3, h: 2, solid: true, resize: 'w', minW: 2, variants: ['noodles', 'skewers', 'sweets', 'tea', 'toys', 'fruit', 'fortune', 'goldfish'], draw: drawStall, light: stallLight },
+  { type: 'paper_lantern', label: 'Lantern post', w: 1, h: 1, solid: true, resize: 'none', variants: ['red', 'amber', 'jade'], draw: drawLanternPost, light: lanternPostLight },
+  { type: 'string_lights', label: 'String lights (hang overhead)', w: 8, h: 1, solid: false, resize: 'wh', minW: 1, minH: 1, draw: () => {}, overhead: drawStringLights, light: stringLightsLight },
+  { type: 'neon_sign', label: 'Neon sign', w: 2, h: 1, solid: false, resize: 'none', variants: ['bowl', 'fish', 'cup', 'moon', 'star'], draw: drawNeonSign, light: neonLight },
+  { type: 'wishing_tree', label: 'Wishing tree', w: 3, h: 3, solid: true, resize: 'none', draw: drawWishingTree, light: wishingTreeLight },
+  { type: 'night_table', label: 'Night-market table', w: 2, h: 1, solid: true, resize: 'w', minW: 1, draw: drawNightTable, light: nightTableLight },
+  { type: 'crates', label: 'Crates, barrels, baskets', w: 1, h: 1, solid: true, resize: 'none', variants: ['crates', 'barrels', 'baskets'], draw: drawCrates },
+  { type: 'floating_lantern', label: 'Floating lantern (pond or sky)', w: 1, h: 1, solid: false, resize: 'none', variants: ['pond', 'sky'], draw: drawFloatingLantern, light: floatingLanternLight },
+  { type: 'pillar', label: 'Lacquer pillar', w: 1, h: 1, solid: true, resize: 'none', draw: drawPillar },
+  { type: 'nobori', label: 'Banner flag', w: 1, h: 1, solid: true, resize: 'none', variants: ['red', 'teal', 'gold'], draw: drawNobori },
 ]
 
 const BY_TYPE = new Map(PROP_CATALOG.map((d) => [d.type, d]))

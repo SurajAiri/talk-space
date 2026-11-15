@@ -16,6 +16,9 @@ import { api } from "../lib/api";
 import { PRIVACY_POLICY_PATH } from "../lib/legal";
 import {
   normalizeUsername,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  USERNAME_UNAVAILABLE,
   validateEmail,
   validateExistingPassword,
   validateName,
@@ -46,6 +49,8 @@ export default function AuthPage() {
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [attempted, setAttempted] = useState(false); // after the first submit, every problem is shown at once
   const [formError, setFormError] = useState<string | null>(null);
+  // the username the server refused as "not available" (too like the team's name, or foul); shown on the field until it changes
+  const [refusedUsername, setRefusedUsername] = useState<string | null>(null);
   const isSignup = mode === "signup";
   // The server says whether Google sign-in is configured; don't offer a button that can't work.
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -73,7 +78,10 @@ export default function AuthPage() {
 
   const errors = {
     name: isSignup ? validateName(form.name) : null,
-    username: isSignup ? validateUsername(form.username) : null,
+    username: isSignup
+      ? (validateUsername(form.username) ??
+        (refusedUsername === form.username ? USERNAME_UNAVAILABLE : null))
+      : null,
     email: validateEmail(form.email),
     password: isSignup
       ? validateNewPassword(form.password)
@@ -115,7 +123,19 @@ export default function AuthPage() {
       toast.success(isSignup ? "Account created" : "Welcome back");
       navigate("/home", { replace: true });
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Something went wrong");
+      if (isSignup && err instanceof Error && err.message === USERNAME_UNAVAILABLE) {
+        // say it next to the field it is about
+        setRefusedUsername(form.username);
+        setTimeout(
+          () =>
+            document
+              .querySelector<HTMLElement>('.auth-card [aria-invalid="true"]')
+              ?.focus(),
+          0,
+        );
+      } else {
+        setFormError(err instanceof Error ? err.message : "Something went wrong");
+      }
     }
   }
 
@@ -224,7 +244,9 @@ export default function AuthPage() {
                   autoCapitalize="none"
                   spellCheck={false}
                   enterKeyHint="next"
-                  placeholder="maya_c"
+                  maxLength={USERNAME_MAX}
+                  hint={`${USERNAME_MIN}-${USERNAME_MAX} letters, numbers or underscores`}
+                  placeholder="maya_chen"
                 />
               </div>
             )}

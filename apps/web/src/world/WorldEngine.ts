@@ -1,9 +1,10 @@
 import { appearanceFor } from './appearance.ts'
+import { clampZoom, fitZoom, wheelZoomFactor, zoomLimits, type ZoomLimits } from './camera.ts'
 import { HEARING, hearingGain, zoneAt } from './hearing.ts'
 import { findPath, isTileBlocked, type Waypoint } from './navigation.ts'
 import { drawCharacter, drawCharacterOverlays } from './render/character.ts'
-import { drawPropItem, drawWorldTiles } from './render/scene.ts'
-import { TILE, type Character, type Seat } from './types.ts'
+import { drawNight, drawPropItem, drawWorldTiles, nightPropsOf } from './render/scene.ts'
+import { TILE, type Character, type Prop, type Seat } from './types.ts'
 import type { WorldSession } from './WorldSession.ts'
 
 /**
@@ -14,11 +15,6 @@ const SPEED = 198
 const REMOTE_SMOOTHING = 14 // higher = remote avatars snap to their network position faster
 const CAMERA_SMOOTHING = 9
 const SNAP_DISTANCE = 6 * TILE // farther than this (join, lag spike): jump instead of gliding across the map
-const MIN_ZOOM = 0.5
-const MAX_ZOOM = 2
-/** Aim to show about this many tiles top to bottom AND this many across, whichever is tighter: a phone held either way and a big monitor all get a comfortable slice. */
-const FIT_TILES_TALL = 12
-const FIT_TILES_WIDE = 9
 const STICK_DEADZONE = 0.16
 const TAP_MAX_MS = 600
 const TAP_MAX_MOVE = 10 // px: a finger that travels further than this is panning/pinching, not tapping
@@ -69,6 +65,8 @@ export class WorldEngine {
   private camera: { x: number; y: number }
   private view = { x: 0, y: 0 } // clamped camera centre of the last frame (for click -> world mapping)
   private zoom = 1
+  private limits: ZoomLimits = { min: 0.5, max: 1.8 } // set for real in resize(): they depend on the screen and the map
+  private readonly night: Prop[] // props that throw light or hang overhead (empty on daytime maps)
   private userZoomed = false // once someone zooms by hand, stop re-fitting on resize/rotation
   private readonly pointers = new Map<number, { x: number; y: number }>()
   private tap: { id: number; x: number; y: number; t: number } | null = null
@@ -88,6 +86,7 @@ export class WorldEngine {
     this.ctx = ctx
 
     for (const s of opts.session.map.seats) this.seats.set(`${s.col},${s.row}`, s)
+    this.night = nightPropsOf(opts.session.map.props)
 
     const l = opts.session.local
     this.player = {
@@ -190,7 +189,7 @@ export class WorldEngine {
       const spread = this.pointerSpread()
       if (this.pinch.dist > 0 && spread > 0) {
         this.userZoomed = true
-        this.zoom = clamp(this.pinch.zoom * (spread / this.pinch.dist), MIN_ZOOM, MAX_ZOOM)
+        this.zoom = clampZoom(this.pinch.zoom * (spread / this.pinch.dist), this.limits)
       }
     }
   }
@@ -219,20 +218,21 @@ export class WorldEngine {
     const rect = this.canvas.getBoundingClientRect()
     const wx = (clientX - rect.left - this.cssW / 2) / this.zoom + this.view.x
     const wy = (clientY - rect.top - this.cssH / 2) / this.zoom + this.view.y
-    const path = findPath(
-      this.session.map,
-      { col: Math.floor(this.player.x / TILE), row: Math.floor(this.player.y / TILE) },
-      { col: Math.floor(wx / TILE), row: Math.floor(wy / TILE) },
-    )
-    if (!path) return // wall, water or unreachable: ignore the tap
+    this.walkToTile(Math.floor(wx / TILE), Math.floor(wy / TILE))
+  }
+
+  /** Walk to a tile (if there is a way there). Shared by taps on the map and clicks on the minimap. */
+  private walkToTile(col: number, row: number) {
+    const path = findPath(this.session.map, { col: Math.floor(this.player.x / TILE), row: Math.floor(this.player.y / TILE) }, { col, row })
+    if (!path) return // wall, water or unreachable: ignore it
     this.path = path
-    this.marker = { x: (Math.floor(wx / TILE) + 0.5) * TILE, y: (Math.floor(wy / TILE) + 0.5) * TILE, age: 0 }
+    this.marker = { x: (col + 0.5) * TILE, y: (row + 0.5) * TILE, age: 0 }
   }
 
   private readonly onWheel = (e: WheelEvent) => {
     e.preventDefault()
     this.userZoomed = true
-    this.zoom = clamp(this.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), MIN_ZOOM, MAX_ZOOM)
+    this.zoom = clampZoom(this.zoom * wheelZoomFactor(e.deltaY, e.deltaMode), this.limits)
   }
 
   private resize() {
@@ -246,7 +246,9 @@ export class WorldEngine {
     // size really changed (phones fire resize for address-bar and safe-area tweaks that change nothing).
     if (this.canvas.width !== w) this.canvas.width = w
     if (this.canvas.height !== h) this.canvas.height = h
-    if (!this.userZoomed) this.zoom = clamp(Math.min(this.cssH / (FIT_TILES_TALL * TILE), this.cssW / (FIT_TILES_WIDE * TILE)), 0.7, 1.3)
+    // the limits follow the window (and the map), so a resized or rotated screen can never leave the zoom outside them
+    this.limits = zoomLimits(this.cssW, this.cssH, this.session.map.cols, this.session.map.rows)
+    this.zoom = this.userZoomed ? clampZoom(this.zoom, this.limits) : fitZoom(this.cssW, this.cssH, this.limits)
     // ResizeObserver callbacks run AFTER this frame's requestAnimationFrame and just BEFORE the screen is painted. A
     // wiped canvas would therefore be shown blank for one frame (the flicker). Redraw right now so it never is.
     if (this.raf) this.render(performance.now())
@@ -347,6 +349,9 @@ export class WorldEngine {
     this.updateRemotes(dt)
     this.applyBubbles(performance.now())
 
+    const walk = this.session.takeWalkRequest()
+    if (walk) this.walkToTile(walk.col, walk.row)
+
     const cam = 1 - Math.exp(-CAMERA_SMOOTHING * dt)
     this.camera.x += (p.x - this.camera.x) * cam
     this.camera.y += (p.y - this.camera.y) * cam
@@ -439,6 +444,12 @@ export class WorldEngine {
     const cx = viewW >= mapW ? mapW / 2 : clamp(this.camera.x, viewW / 2, mapW - viewW / 2)
     const cy = viewH >= mapH ? mapH / 2 : clamp(this.camera.y, viewH / 2, mapH - viewH / 2)
     this.view = { x: cx, y: cy }
+    // tell the minimap what is on screen (tile units)
+    const vp = session.viewport
+    vp.x = cx / TILE
+    vp.y = cy / TILE
+    vp.w = viewW / TILE
+    vp.h = viewH / TILE
 
     ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, (this.cssW / 2 - cx * zoom) * dpr, (this.cssH / 2 - cy * zoom) * dpr)
 
@@ -476,6 +487,9 @@ export class WorldEngine {
     }
     items.sort((a, b) => a.sortY - b.sortY)
     for (const it of items) it.draw()
+
+    // lanterns and signs add light, string lights hang over everyone: after the people, before the name tags
+    drawNight(ctx, this.night, time, { x1: cx - viewW / 2, y1: cy - viewH / 2, x2: cx + viewW / 2, y2: cy + viewH / 2 })
 
     // zoomed out (a phone): grow the name tags and bubbles so they stay readable
     const overlayScale = clamp(1 / zoom, 0.85, 1.5)

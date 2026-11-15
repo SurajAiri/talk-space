@@ -64,6 +64,9 @@ export class WorldSession {
   readonly bubbles = new Map<string, Bubble>()
   /** On-screen joystick, -1..1 on each axis (0,0 = released). Written by the UI, read by the engine. */
   readonly joystick = { x: 0, y: 0 }
+  /** The part of the map on screen, in tile units (centre and size). Written by the engine every frame, read by the minimap. */
+  readonly viewport = { x: 0, y: 0, w: 0, h: 0 }
+  private walkRequest: { col: number; row: number } | null = null
 
   private send: ((msg: PosMessage) => void) | null = null
   private audioGate: ((id: string, on: boolean) => void) | null = null
@@ -84,6 +87,18 @@ export class WorldSession {
     const spawn = pickSpawn(opts.map, opts.selfId)
     this.local = { x: spawn.col + 0.5, y: spawn.row + 0.5, dir: 'down', moving: false }
     this.timer = setInterval(() => this.tick(), TICK_MS)
+  }
+
+  /** Ask the avatar to walk to a tile (the minimap does this). The engine picks it up on its next frame. */
+  requestWalk(col: number, row: number) {
+    this.walkRequest = { col, row }
+  }
+
+  /** Engine side of requestWalk: returns the pending request once. */
+  takeWalkRequest(): { col: number; row: number } | null {
+    const r = this.walkRequest
+    this.walkRequest = null
+    return r
   }
 
   /** (Re)bind to a fresh network. Anything learned from the old one is stale. */

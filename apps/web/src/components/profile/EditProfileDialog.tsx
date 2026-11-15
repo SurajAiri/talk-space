@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { useModal } from '../../hooks/useModal'
 import { ApiError, type User } from '../../lib/api'
 import { profileApi, type ProfileOptions, type ProfilePatch } from '../../lib/profile'
-import { normalizeUsername, sameList, validateBio, validateName, validateUsername } from '../../lib/validation'
+import { normalizeUsername, sameList, USERNAME_MAX, USERNAME_MIN, USERNAME_UNAVAILABLE, validateBio, validateName, validateUsername } from '../../lib/validation'
 import { useAuthStore } from '../../store/auth.store'
 import ChipPicker from '../form/ChipPicker'
 import { TextArea, TextField } from '../form/fields'
@@ -33,11 +33,17 @@ export default function EditProfileDialog({ user, options, onClose }: Props) {
   const [attempted, setAttempted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [usernameTaken, setUsernameTaken] = useState<string | null>(null) // the username the server refused
+  const [usernameTaken, setUsernameTaken] = useState<string | null>(null) // the username the server said is taken
+  const [usernameRefused, setUsernameRefused] = useState<string | null>(null) // ... and the one it said is not available
 
   const errors = {
     name: validateName(form.name),
-    username: validateUsername(form.username) ?? (usernameTaken === form.username ? 'That username is taken' : null),
+    // Only judged when it is being changed: a name from before the 6-character minimum stays valid, so it never blocks saving a new bio
+    username:
+      form.username === user.username
+        ? null
+        : (validateUsername(form.username) ??
+          (usernameTaken === form.username ? 'That username is taken' : usernameRefused === form.username ? USERNAME_UNAVAILABLE : null)),
     bio: validateBio(form.bio, options.bioMax),
   }
   const hasErrors = Object.values(errors).some(Boolean)
@@ -75,8 +81,9 @@ export default function EditProfileDialog({ user, options, onClose }: Props) {
       toast.success('Profile updated')
       onClose()
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setUsernameTaken(form.username)
+      if (err instanceof ApiError && (err.status === 409 || (err.status === 400 && err.message === USERNAME_UNAVAILABLE))) {
+        if (err.status === 409) setUsernameTaken(form.username)
+        else setUsernameRefused(form.username)
         setTimeout(() => dialogRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(), 0)
       } else {
         setFormError(err instanceof Error ? err.message : 'Could not save your changes')
@@ -121,7 +128,9 @@ export default function EditProfileDialog({ user, options, onClose }: Props) {
                 value={form.username}
                 onValueChange={set('username')}
                 error={errors.username}
-                showError={attempted || usernameTaken === form.username}
+                showError={attempted || usernameTaken === form.username || usernameRefused === form.username}
+                maxLength={USERNAME_MAX}
+                hint={`${USERNAME_MIN}-${USERNAME_MAX} letters, numbers or underscores`}
                 valid
                 autoComplete="username"
                 autoCapitalize="none"

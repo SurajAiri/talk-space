@@ -811,6 +811,240 @@ const RUG_TILES: readonly TileDef[] = [
   { id: 25, char: 'C', name: 'Rug bottom-right', category: 'floor', solid: false, swatch: '#b32222', draw: baked(rugPiece(false, true, false, true)) },
 ]
 
+// =============================================================================================
+// NIGHT MARKET PACK (Sky Night Market)
+// Deliberately dim: the warm light comes from the PROPS (PropDef.light, added on top of the scene), so these
+// tiles are dark, slightly wet stone and lacquered wood that glow when a lantern or stall is near them.
+// =============================================================================================
+
+const TAU = Math.PI * 2
+
+/** Running-bond cobbles of dark blue-violet stone with a catch-light on every top edge. */
+function drawNightCobble(g: CanvasRenderingContext2D, x: number, y: number, c: number, r: number) {
+  fillCell(g, x, y, '#15122b')
+  const bonds = [
+    [0, 22, 48],
+    [0, 13, 35, 48],
+    [0, 27, 48],
+  ] as const
+  const shift = Math.floor(noise(c, r, 3) * 3)
+  for (let i = 0; i < 3; i++) {
+    const b = bonds[(i + shift) % 3]!
+    const y0 = y + i * 16
+    for (let j = 0; j < b.length - 1; j++) {
+      const x0 = x + b[j]!
+      const x1 = x + b[j + 1]!
+      const n = noise(c * 7 + j, r * 5 + i, 11)
+      g.fillStyle = n > 0.7 ? '#342e60' : n > 0.35 ? '#2d2853' : '#272248'
+      g.beginPath()
+      g.roundRect(x0 + 1.2, y0 + 1.2, x1 - x0 - 2.4, 13.6, 3.2)
+      g.fill()
+      g.fillStyle = 'rgba(170, 160, 255, 0.11)'
+      g.fillRect(x0 + 3.2, y0 + 2.2, x1 - x0 - 6.4, 1.5)
+    }
+  }
+  if (noise(c, r, 5) > 0.8) {
+    // a damp patch that holds a little lamp-light
+    g.fillStyle = 'rgba(255, 186, 120, 0.07)'
+    g.beginPath()
+    g.ellipse(x + 10 + noise(c, r, 6) * 28, y + 10 + noise(c, r, 7) * 28, 15, 7, 0.4, 0, TAU)
+    g.fill()
+  }
+}
+
+/** Plum paving slabs with a brass diamond inlaid on every other tile: the plazas and the main lanes. */
+function drawLanternPaving(g: CanvasRenderingContext2D, x: number, y: number, c: number, r: number) {
+  fillCell(g, x, y, '#1e1535')
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      const n = noise(c * 3 + i, r * 3 + j, 21)
+      g.fillStyle = n > 0.8 ? '#42305f' : (i + j) % 2 === 0 ? '#38274f' : '#31224a'
+      g.beginPath()
+      g.roundRect(x + i * 24 + 1.5, y + j * 24 + 1.5, 21, 21, 2.5)
+      g.fill()
+      g.fillStyle = 'rgba(255, 205, 170, 0.08)'
+      g.fillRect(x + i * 24 + 3.5, y + j * 24 + 2.6, 17, 1.4)
+    }
+  }
+  if ((c + r) % 2 === 0) {
+    g.strokeStyle = 'rgba(222, 168, 76, 0.6)'
+    g.lineWidth = 1.7
+    g.beginPath()
+    g.moveTo(x + 24, y + 8)
+    g.lineTo(x + 40, y + 24)
+    g.lineTo(x + 24, y + 40)
+    g.lineTo(x + 8, y + 24)
+    g.closePath()
+    g.stroke()
+    g.fillStyle = 'rgba(222, 168, 76, 0.55)'
+    g.beginPath()
+    g.arc(x + 24, y + 24, 2.6, 0, TAU)
+    g.fill()
+  }
+}
+
+/** Dark lacquered planks with brass nails: stall decks, the tea house, the pavilion island. */
+function drawMarketBoards(g: CanvasRenderingContext2D, x: number, y: number, c: number, r: number) {
+  fillCell(g, x, y, '#24110d')
+  for (let i = 0; i < 4; i++) {
+    const n = noise(c * 5 + i, r, 31)
+    const py = y + i * 12
+    g.fillStyle = n > 0.66 ? '#68402e' : n > 0.33 ? '#5a3624' : '#4f2f20'
+    g.fillRect(x, py + 0.8, TILE, 10.4)
+    g.fillStyle = 'rgba(255, 214, 170, 0.12)'
+    g.fillRect(x, py + 1.2, TILE, 1.6)
+    g.fillStyle = 'rgba(30, 12, 8, 0.35)'
+    g.fillRect(x + noise(c, r, 33 + i) * 30, py + 5.5, 12 + noise(c, r, 37 + i) * 12, 1)
+    g.fillStyle = 'rgba(20, 8, 6, 0.55)'
+    g.fillRect(x + 8 + noise(c, r, 41 + i) * 32, py + 0.8, 1.2, 10.4) // butt joint
+    g.fillStyle = 'rgba(224, 178, 96, 0.55)'
+    g.fillRect(x + 4, py + 5, 2, 2)
+    g.fillRect(x + TILE - 6, py + 5, 2, 2)
+  }
+}
+
+/** The painted part of the canal: deep teal-indigo with a faint depth shift. The moving reflections go on top. */
+const canalBase = baked((g, x, y, c, r) => {
+  fillCell(g, x, y, (c + r) % 2 === 0 ? '#0d2c4d' : '#0f3254')
+  const grad = g.createLinearGradient(x, y, x + TILE, y + TILE)
+  grad.addColorStop(0, 'rgba(60, 200, 190, 0.10)')
+  grad.addColorStop(1, 'rgba(20, 20, 80, 0.16)')
+  g.fillStyle = grad
+  g.fillRect(x, y, TILE, TILE)
+  g.strokeStyle = 'rgba(190, 235, 255, 0.07)'
+  g.lineWidth = 1.2
+  for (let i = 0; i < 2; i++) {
+    const rx = x + 6 + noise(c, r, 45 + i) * 28
+    const ry = y + 8 + noise(c, r, 47 + i) * 30
+    g.beginPath()
+    g.ellipse(rx, ry, 8, 2.6, 0, 0, TAU)
+    g.stroke()
+  }
+})
+
+const REFLECTION = ['255, 110, 80', '255, 190, 100', '80, 235, 200'] as const
+
+/** Lantern canal: lamp reflections that stretch and shimmer. Solid, like all water. */
+function drawLanternCanal(g: CanvasRenderingContext2D, x: number, y: number, c: number, r: number, time: number) {
+  canalBase(g, x, y, c, r, time)
+  const t = time * 0.0022
+  for (let i = 0; i < 3; i++) {
+    const n = noise(c, r, 40 + i)
+    if (n < 0.42) continue
+    const w = 0.5 + 0.5 * Math.sin(t + n * 25)
+    g.globalAlpha = 0.14 + 0.3 * w
+    g.fillStyle = `rgb(${REFLECTION[Math.floor(noise(c, r, 60 + i) * 3)]})`
+    g.fillRect(x + 6 + noise(c, r, 50 + i) * 34, y + 5 + noise(c, r, 70 + i) * 18, 2.4, 9 + 14 * w)
+  }
+  g.globalAlpha = 1
+}
+
+/** A shophouse front: red-tiled eave, dark timber, paper windows lit from inside. Solid. */
+function drawShopfront(g: CanvasRenderingContext2D, x: number, y: number, c: number, r: number) {
+  fillCell(g, x, y, '#1b1228')
+  g.fillStyle = '#6a281f'
+  g.fillRect(x, y, TILE, 13)
+  g.fillStyle = '#8c3b2b'
+  for (let i = 0; i < 4; i++) {
+    g.beginPath()
+    g.arc(x + 6 + i * 12, y + 13, 6, 0, Math.PI)
+    g.fill()
+  }
+  g.fillStyle = 'rgba(255, 190, 150, 0.22)'
+  g.fillRect(x, y + 1, TILE, 1.6)
+  g.fillStyle = '#2b1a2b'
+  g.fillRect(x, y + 17, TILE, 25)
+  g.fillStyle = '#4b2a26'
+  g.fillRect(x, y + 17, 3, 25)
+  g.fillRect(x + TILE - 3, y + 17, 3, 25)
+  const n = noise(c, r, 81)
+  const lit = n > 0.22
+  const jade = n > 0.9
+  const wx = x + 8
+  const wy = y + 20
+  if (lit) {
+    const grad = g.createLinearGradient(wx, wy, wx, wy + 18)
+    grad.addColorStop(0, jade ? '#9ff5dc' : '#ffdc98')
+    grad.addColorStop(1, jade ? '#3fcfae' : '#ff9e4f')
+    g.fillStyle = grad
+  } else {
+    g.fillStyle = '#3a2c48'
+  }
+  g.fillRect(wx, wy, 32, 18)
+  g.fillStyle = 'rgba(40, 18, 14, 0.8)'
+  g.fillRect(wx + 10.2, wy, 1.6, 18)
+  g.fillRect(wx + 20.2, wy, 1.6, 18)
+  g.fillRect(wx, wy + 8.2, 32, 1.6)
+  g.strokeStyle = '#5a342c'
+  g.lineWidth = 2
+  g.strokeRect(wx - 1, wy - 1, 34, 20)
+  g.fillStyle = '#120b1d'
+  g.fillRect(x, y + 42, TILE, 6)
+}
+
+/** Open night sky past the edge of the terrace: soft violet cloud and a few stars that twinkle. Solid. */
+const skyBase = baked((g, x, y, c, r) => {
+  fillCell(g, x, y, '#0a0b2a')
+  for (let i = 0; i < 2; i++) {
+    if (noise(c, r, 80 + i) < 0.3) continue
+    const bx = x + 8 + noise(c, r, 83 + i) * 32
+    const by = y + 8 + noise(c, r, 86 + i) * 32
+    const rad = 17 + noise(c, r, 89 + i) * 8
+    const grad = g.createRadialGradient(bx, by, 0, bx, by, rad)
+    grad.addColorStop(0, 'rgba(96, 84, 200, 0.22)')
+    grad.addColorStop(1, 'rgba(96, 84, 200, 0)')
+    g.fillStyle = grad
+    g.fillRect(bx - rad, by - rad, rad * 2, rad * 2)
+  }
+}, 8)
+
+function drawNightSky(g: CanvasRenderingContext2D, x: number, y: number, c: number, r: number, time: number) {
+  skyBase(g, x, y, c, r, time)
+  for (let i = 0; i < 3; i++) {
+    const n = noise(c, r, 90 + i)
+    if (n < 0.5) continue
+    g.globalAlpha = 0.2 + 0.8 * (0.5 + 0.5 * Math.sin(time * 0.003 + n * 60))
+    g.fillStyle = n > 0.8 ? '#ffe9b0' : '#d6e4ff'
+    const s = n > 0.9 ? 2.6 : 1.7
+    g.fillRect(x + 4 + noise(c, r, 100 + i) * 40, y + 4 + noise(c, r, 104 + i) * 40, s, s)
+  }
+  g.globalAlpha = 1
+}
+
+/** A stone balustrade along the edge of the terrace. `vertical` runs it top to bottom. Solid. */
+function railPiece(vertical: boolean): Painter {
+  return (g, x, y, c, r) => {
+    fillCell(g, x, y, '#15122b')
+    g.save()
+    g.translate(x + TILE / 2, y + TILE / 2)
+    if (vertical) g.rotate(Math.PI / 2)
+    g.translate(-TILE / 2, -TILE / 2)
+    g.fillStyle = 'rgba(0, 0, 0, 0.35)'
+    g.fillRect(0, 31, TILE, 8)
+    g.fillStyle = '#383168'
+    for (let i = 0; i < 4; i++) g.fillRect(4 + i * 12, 24, 5, 12)
+    g.fillStyle = '#4b4380'
+    g.beginPath()
+    g.roundRect(0, 15, TILE, 11, 3)
+    g.fill()
+    g.fillStyle = '#8078c2'
+    g.fillRect(2, 16, TILE - 4, 2)
+    g.fillStyle = '#5c539a'
+    g.beginPath()
+    g.roundRect(18, 7, 12, 31, 3)
+    g.fill()
+    g.fillStyle = '#9088d6'
+    g.beginPath()
+    g.roundRect(16.5, 5, 15, 6, 3)
+    g.fill()
+    g.fillStyle = noise(c, r, 7) > 0.5 ? '#e6b45a' : '#cf9a40'
+    g.beginPath()
+    g.arc(24, 4.5, 2.4, 0, TAU)
+    g.fill()
+    g.restore()
+  }
+}
+
 export const TILESET: readonly TileDef[] = [
   { id: 0, char: '.', name: 'Grass', category: 'ground', solid: false, swatch: '#3f8f4e', draw: drawGrass },
   {
@@ -937,6 +1171,15 @@ export const TILESET: readonly TileDef[] = [
   { id: 42, char: 'V', name: 'Viewport', category: 'wall', solid: true, swatch: '#030712', draw: drawViewport },
   { id: 43, char: 'v', name: 'Deep space', category: 'wall', solid: true, swatch: '#030617', draw: drawVoid },
   { id: 44, char: 'Y', name: 'Bio floor', category: 'floor', solid: false, swatch: '#8fcab2', draw: baked(drawBioFloor) },
+  // ---- night market pack (appended; existing tiles never change) ----
+  { id: 45, char: 'u', name: 'Night cobble', category: 'ground', solid: false, swatch: '#2d2853', draw: baked(drawNightCobble) },
+  { id: 46, char: 'o', name: 'Lantern paving', category: 'floor', solid: false, swatch: '#38274f', draw: baked(drawLanternPaving) },
+  { id: 47, char: 'e', name: 'Market boards', category: 'floor', solid: false, swatch: '#5a3624', draw: baked(drawMarketBoards) },
+  { id: 48, char: 'l', name: 'Lantern canal', category: 'water', solid: true, swatch: '#0f3254', draw: drawLanternCanal },
+  { id: 49, char: 'i', name: 'Shopfront', category: 'wall', solid: true, swatch: '#6a281f', draw: baked(drawShopfront) },
+  { id: 50, char: 'x', name: 'Night sky', category: 'wall', solid: true, swatch: '#0a0b2a', draw: drawNightSky },
+  { id: 51, char: 'n', name: 'Balustrade', category: 'wall', solid: true, swatch: '#4b4380', draw: baked(railPiece(false)) },
+  { id: 52, char: 'z', name: 'Balustrade vertical', category: 'wall', solid: true, swatch: '#4b4380', draw: baked(railPiece(true)) },
 ]
 
 const BY_ID = new Map(TILESET.map((t) => [t.id, t]))

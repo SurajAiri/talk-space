@@ -31,6 +31,14 @@ describe("registration and login", () => {
       ip: "10.1.1.3",
     });
     assert.equal(badName.status, 400);
+
+    // the public may not take short, reserved or foul names (staff can: see user.test.ts)
+    for (const [i, username] of ["abcde", "admin", "Developer_7", "xx_fuck_xx"].entries()) {
+      const r = await http("/auth/register", { body: { ...base, username, password: "long-enough-pw" }, ip: `10.1.1.${10 + i}` });
+      assert.equal(r.status, 400, username);
+    }
+    const reserved = await http("/auth/register", { body: { ...base, username: "staff_01", password: "long-enough-pw" }, ip: "10.1.1.20" });
+    assert.equal(reserved.json.message, "That username isn’t available", "one neutral message, whichever rule it hit");
   });
 
   test("duplicate email is refused", async () => {
