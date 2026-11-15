@@ -17,7 +17,7 @@ function initiallyOpen(): boolean {
   } catch {
     /* private mode: fall through to the default */
   }
-  // a phone's corners are busy and its screen small: start closed there, open on a laptop
+  // a phone's screen is small: start closed there, open on a laptop
   return !window.matchMedia('(pointer: coarse)').matches
 }
 

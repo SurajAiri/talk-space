@@ -743,8 +743,8 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .joystick-knob { position: relative; width: 58px; height: 58px; border-radius: 50%; background: rgb(255 255 255 / 0.92); box-shadow: 0 6px 16px rgb(0 0 0 / 0.4); will-change: transform; }
 .joystick.is-active .joystick-knob { background: #fff; }
 
-/* mini map: bottom right on a laptop (the chat panel sits above it), top right where the bottom corners are busy */
-.minimap, .minimap-toggle { position: absolute; z-index: 15; right: calc(12px + var(--safe-r)); bottom: calc(12px + var(--safe-b)); }
+/* mini map: top right, under the top bar. Floating panels (z-index 40+) just go on top of it and can be dragged away. */
+.minimap, .minimap-toggle { position: absolute; z-index: 15; right: calc(12px + var(--safe-r)); top: calc(64px + var(--safe-t)); }
 .minimap {
   overflow: hidden; border: 1px solid var(--glass-line); border-radius: var(--r-md); background: var(--glass);
   box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -760,10 +760,7 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .minimap-toggle { width: 44px; height: 44px; border-radius: 50%; box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.6); }
 .minimap-close:hover, .minimap-toggle:hover { background: rgb(24 33 66 / 0.9); }
 .minimap-close:focus-visible, .minimap-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-@media (pointer: coarse), (max-width: 720px) {
-  .minimap, .minimap-toggle { top: calc(64px + var(--safe-t)); bottom: auto; }
-  .minimap { max-width: 132px; }
-}
+@media (pointer: coarse), (max-width: 720px) { .minimap { max-width: 132px; } }
 @media (max-height: 520px) { .minimap, .minimap-toggle { top: calc(54px + var(--safe-t)); } }
 @media (pointer: coarse) {
   /* phones held sideways get a floating panel rather than a sheet: same clearance for the badge */
