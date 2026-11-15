@@ -26,7 +26,6 @@ app.use(helmet());
 // handshake relies on a short-lived cookie.
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  // if (origin && origin === env.WEB_URL) {
   if (origin && env.WEB_URLS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");

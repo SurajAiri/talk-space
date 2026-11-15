@@ -2,7 +2,12 @@ import type { Socket } from 'socket.io-client'
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { connectSocket, disconnectSocket } from '../lib/socket'
-import { createManualReconnect, isFatalConnectError, type ManualReconnect } from '../lib/socketConnect'
+import {
+  createManualReconnect,
+  describeConnectFailure,
+  isFatalConnectError,
+  type ManualReconnect,
+} from '../lib/socketConnect'
 import { loadBlocked, saveBlocked } from '../lib/blocklist'
 import { loadRoomConfig, reportsApi, type RoomView } from '../lib/rooms'
 import { NetworkManager } from '../webrtc/NetworkManager'
@@ -394,8 +399,10 @@ export const useRoomStore = create<RoomState>()((set, get) => {
     const retry = createManualReconnect({
       socket: s,
       isWaiting: () => get().status === 'reconnecting',
-      giveUp: (why) =>
-        endSession(`Lost the connection to the server and could not restore it (${why}). Join the room again.`),
+      giveUp: (why) => {
+        console.warn('[socket] gave up reconnecting:', why)
+        endSession(`Lost the connection to the server. ${describeConnectFailure(why)}`)
+      },
     })
     manual = retry
 
@@ -422,7 +429,11 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       retry.reset()
       if (get().status !== 'reconnecting' || !joinParams) return
       const gen = generation
-      const ack = await emitJoin(s, joinParams)
+      // A flaky link can lose the first join request: try a few times before giving up on the room
+      let ack = await emitJoin(s, joinParams)
+      for (let i = 0; i < 2 && !ack.ok && ack.code === 'TIMEOUT' && gen === generation && s.connected; i++) {
+        ack = await emitJoin(s, joinParams)
+      }
       if (gen !== generation) return
       if (!ack.ok) return endSession(`Couldn't rejoin the room: ${ack.message}`)
       if (ack.resumed) resumeNetwork(ack)

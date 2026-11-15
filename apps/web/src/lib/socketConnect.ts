@@ -39,6 +39,13 @@ export const manualRetryDelayMs = (attempt: number) => Math.min(1000 * 2 ** atte
 /** The server says this account may not connect at all: retrying cannot help. */
 export const isFatalConnectError = (err: Error) => err.message.startsWith('ACCOUNT_')
 
+/** What to tell the person when the retries ran out. Raw codes ("websocket error") mean nothing to them. */
+export function describeConnectFailure(why: string): string {
+  if (why === 'UNAUTHORIZED') return 'Your sign-in may have expired. Sign in again, then rejoin the room.'
+  if (why === 'UNAVAILABLE') return 'The server is having trouble right now. Try again in a minute.'
+  return 'The server could not be reached. Check your connection, then rejoin the room.'
+}
+
 export interface ManualReconnect {
   /** The server refused or closed us: call connect() again after a pause, or give up after too many tries. */
   schedule(why: string): void

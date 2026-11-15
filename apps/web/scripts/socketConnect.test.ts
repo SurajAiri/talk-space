@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import type { Socket } from 'socket.io-client'
 import {
   createManualReconnect,
+  describeConnectFailure,
   isFatalConnectError,
   MAX_MANUAL_RETRIES,
   manualRetryDelayMs,
@@ -119,4 +120,16 @@ test('only account blocks are fatal; UNAUTHORIZED may be a passing server proble
   assert.equal(isFatalConnectError(new Error('ACCOUNT_SUSPENDED')), true)
   assert.equal(isFatalConnectError(new Error('UNAUTHORIZED')), false)
   assert.equal(isFatalConnectError(new Error('websocket error')), false)
+})
+
+test('the give-up message never shows a raw error code', () => {
+  const raw = ['UNAUTHORIZED', 'UNAVAILABLE', 'websocket error', 'io server disconnect']
+  for (const why of raw) {
+    const text = describeConnectFailure(why)
+    for (const code of raw) assert.ok(!text.includes(code), `"${text}" leaks "${code}"`)
+    assert.ok(text.endsWith('.'))
+  }
+  assert.match(describeConnectFailure('UNAUTHORIZED'), /sign-in/)
+  assert.match(describeConnectFailure('UNAVAILABLE'), /trouble/)
+  assert.match(describeConnectFailure('websocket error'), /could not be reached/)
 })
