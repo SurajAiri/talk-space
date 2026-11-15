@@ -114,24 +114,14 @@ export function createSocketServer(httpServer: HttpServer) {
   setIo(io);
 
   io.use(async (socket, next) => {
-    // 1. Is the token valid? A bad or expired token is final: the client must sign in again.
-    let auth: { id: string; tv: number };
     try {
       const token = (socket.handshake.auth as { token?: unknown }).token;
       if (typeof token !== "string") return next(new Error("UNAUTHORIZED"));
-      auth = verifyJWT(token);
-    } catch {
-      return next(new Error("UNAUTHORIZED"));
-    }
-
-    // 2. Look the account up. A failure HERE is our problem (database restarting, pool exhausted), not the
-    // user's: answering "UNAUTHORIZED" would make the client give up and end the room session, so report
-    // a retryable error instead.
-    try {
-      const state = await findAuthState(auth.id);
-      if (!state || state.tokenVersion !== auth.tv) return next(new Error("UNAUTHORIZED"));
+      const { id, tv } = verifyJWT(token);
+      const state = await findAuthState(id);
+      if (!state || state.tokenVersion !== tv) return next(new Error("UNAUTHORIZED"));
       if (state.status !== "active") return next(new Error("ACCOUNT_" + state.status.toUpperCase()));
-      const user = await findUserById(auth.id);
+      const user = await findUserById(id);
       if (!user) return next(new Error("UNAUTHORIZED"));
       socket.data.user = { id: user.id, name: user.name, username: user.username };
       const now = Date.now();
@@ -140,9 +130,8 @@ export function createSocketServer(httpServer: HttpServer) {
       socket.data.joinWindowStart = now;
       socket.data.joinCount = 0;
       next();
-    } catch (err) {
-      console.error("socket auth lookup failed", err);
-      next(new Error("UNAVAILABLE"));
+    } catch {
+      next(new Error("UNAUTHORIZED"));
     }
   });
 

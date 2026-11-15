@@ -4,7 +4,11 @@
    Colour is semantic: cobalt = things you can act on, green = live / audible / connected.
    ===================================================================== */
 
+/* The free Netlify plan stamps a "Powered by Netlify" badge in the bottom-right corner, over everything. This is the
+   height we leave empty there on phones (one round button + its gap): under the chat/people sheets in a room, and
+   under dialogs. Set it to 0px if the badge is ever removed. */
 :root {
+  --host-badge: 64px;
   color-scheme: light dark;
 
   --font-display: 'Bricolage Grotesque Variable', 'Instrument Sans Variable', system-ui, sans-serif;
@@ -297,8 +301,8 @@ a.btn { text-decoration: none; }
 /* ---------- lobby ---------- */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
 .page-head h1 { font-size: 2rem; letter-spacing: -0.03em; }
-.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.btn.is-spinning svg { animation: spin 0.8s linear infinite; }
+.page-actions { display: flex; align-items: center; gap: 10px; }
+.is-spinning { animation: spin 0.8s linear infinite; }
 .page-sub { margin-top: 4px; color: var(--text-2); }
 .lobby { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
 .lobby-side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: calc(var(--topbar-h) + 24px); }
@@ -618,9 +622,6 @@ legend.legend { padding: 0; margin-bottom: 8px; font-weight: 500; font-size: 0.8
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
-  /* The free Netlify plan stamps a "Powered by Netlify" badge in the bottom-right corner, over everything. This is the
-     height we leave empty there (one round button + its gap). Set it to 0px if the badge is ever removed. */
-  --host-badge: 64px;
   position: fixed; inset: 0; overflow: hidden; background: var(--night); color: #fff;
   overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none;
   /* no grey/blue flash over the map when you tap it, and no long-press menu */
@@ -1018,12 +1019,19 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   .room-card-side { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; min-width: 0; }
   .occupancy { flex-direction: row; align-items: center; gap: 10px; }
   .modal-head, .modal-body, .modal-foot { padding-inline: 18px; }
-  /* On phones the host's "Powered by Netlify" badge sits in the bottom-right corner, over everything: keep the dialog
-     (and so its Create / Save buttons) clear of it. Set --host-badge to 0px if the badge is ever removed. */
-  .overlay { --host-badge: 64px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--host-badge)); }
-  .modal { max-height: calc(100dvh - 32px - env(safe-area-inset-bottom, 0px) - var(--host-badge)); }
   .pick-row { grid-template-columns: 1fr; }
   .toolbar .switch { flex: 1 1 100%; }
+}
+
+/* phones (also held sideways): dialogs stop above the host's badge, so Create room / Save never sit under it */
+@media (max-width: 800px), (max-height: 520px) {
+  .overlay { padding-bottom: calc(16px + var(--host-badge)); }
+  .modal { max-height: calc(100dvh - 32px - var(--host-badge)); }
+  /* While typing, if the on-screen keyboard is drawn OVER the page (see lib/virtualKeyboard.ts), it hides the badge,
+     so the form gets that room back. Where the page shrinks to fit the keyboard instead (index.html asks for that),
+     the badge rides on top of the keyboard and keeps its room: this rule does not apply there. */
+  html[data-keyboard-overlay] .overlay { padding-bottom: 16px; }
+  html[data-keyboard-overlay] .modal { max-height: calc(100dvh - 32px); }
 }
 
 /* narrow or short screens (phones, especially held sideways): icon-only controls, smaller map furniture */

@@ -2,6 +2,7 @@ import type { Socket } from 'socket.io-client'
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { connectSocket, disconnectSocket } from '../lib/socket'
+import { createManualReconnect, isFatalConnectError, type ManualReconnect } from '../lib/socketConnect'
 import { loadBlocked, saveBlocked } from '../lib/blocklist'
 import { loadRoomConfig, reportsApi, type RoomView } from '../lib/rooms'
 import { NetworkManager } from '../webrtc/NetworkManager'
@@ -181,6 +182,8 @@ export const useRoomStore = create<RoomState>()((set, get) => {
   let hideIpChoice = false
   /** bumped on every join/leave so late async results from an old attempt are dropped */
   let generation = 0
+  /** retries by hand after socket.io gave up on its own (see attachSocketListeners) */
+  let manual: ManualReconnect | null = null
   const blockedIds = loadBlocked()
   /** `${peerId}:${messageId}` of everything shown, so a peer can't make a message appear twice */
   const seen = new Set<string>()
@@ -211,6 +214,8 @@ export const useRoomStore = create<RoomState>()((set, get) => {
 
   function teardown() {
     generation++
+    manual?.reset()
+    manual = null
     manager?.close()
     manager = null
     world?.close() // stops its timer and every peer's audio
@@ -380,58 +385,44 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       endSession('The host removed you from this room.')
     })
 
-    // Never let two retry timers race each other.
-    let retryTimer: ReturnType<typeof setTimeout> | null = null
-    const stopRetry = () => {
-      if (retryTimer) clearTimeout(retryTimer)
-      retryTimer = null
-    }
-    // socket.io retries on its own after a dropped connection, but gives up for good when the server
-    // refuses the handshake or closes it deliberately. Then WE have to knock again.
-    const retryLater = (ms: number) => {
-      stopRetry()
-      retryTimer = setTimeout(() => {
-        retryTimer = null
-        if (get().status === 'reconnecting' && !s.connected && !s.active) s.connect()
-      }, ms)
-    }
+    /**
+     * socket.io retries a dropped connection by itself, forever. It stops (socket.active === false)
+     * only when the server refused the attempt or closed us on purpose; then nothing happens until
+     * someone calls connect(). That is what this does, with a growing pause, giving up (and telling
+     * the person) after a bounded number of tries instead of showing "Reconnecting…" for ever.
+     */
+    const retry = createManualReconnect({
+      socket: s,
+      isWaiting: () => get().status === 'reconnecting',
+      giveUp: (why) =>
+        endSession(`Lost the connection to the server and could not restore it (${why}). Join the room again.`),
+    })
+    manual = retry
 
     s.on('disconnect', (reason: string) => {
-      if (reason === 'io client disconnect') return stopRetry()
+      if (reason === 'io client disconnect') return
       // Only the signaling connection dropped. The peer-to-peer links do not depend on it, so
       // they stay up: voice and chat keep working while socket.io reconnects and we re-join.
       // The server holds our seat for a short grace period.
       if (get().status === 'joined') set({ status: 'reconnecting' })
-      // 'io server disconnect': the server closed it and socket.io will NOT retry by itself
-      if (reason === 'io server disconnect') retryLater(1000)
+      // 'io server disconnect': the server closed us, and socket.io will NOT reconnect on its own.
+      if (reason === 'io server disconnect') retry.schedule(reason)
     })
 
-    // Fires on every failed attempt. Failures that socket.io retries by itself (server down, no network)
-    // need nothing from us; refusals do.
     s.on('connect_error', (err: Error) => {
+      // The very first connection is judged in lib/socket.ts; this is about a re-connection.
       if (get().status !== 'reconnecting') return
-      const msg = err.message
-      // the token is no longer valid, or the account was suspended: retrying can never work
-      if (msg === 'UNAUTHORIZED' || msg.startsWith('ACCOUNT_')) {
-        return endSession(
-          msg === 'UNAUTHORIZED'
-            ? 'Your sign-in expired while you were disconnected. Sign in again to rejoin.'
-            : 'Your account cannot join rooms right now.',
-        )
-      }
-      // refused for another reason (e.g. the API is up but its database is still starting): try again
-      if (!s.active) retryLater(2000)
+      if (isFatalConnectError(err)) return endSession('Your account cannot join rooms right now.')
+      // active: socket.io is still retrying by itself (network down, server restarting). Not active:
+      // the server refused this attempt, so it is up to us.
+      if (!s.active) retry.schedule(err.message)
     })
 
     s.on('connect', async () => {
-      stopRetry()
+      retry.reset()
       if (get().status !== 'reconnecting' || !joinParams) return
       const gen = generation
-      // A flaky link can lose the first join: try a few times before giving up on the room
-      let ack = await emitJoin(s, joinParams)
-      for (let i = 0; i < 2 && !ack.ok && ack.code === 'TIMEOUT' && gen === generation && s.connected; i++) {
-        ack = await emitJoin(s, joinParams)
-      }
+      const ack = await emitJoin(s, joinParams)
       if (gen !== generation) return
       if (!ack.ok) return endSession(`Couldn't rejoin the room: ${ack.message}`)
       if (ack.resumed) resumeNetwork(ack)

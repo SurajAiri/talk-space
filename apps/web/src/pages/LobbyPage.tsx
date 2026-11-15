@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import AppHeader from '../components/AppHeader'
 import CreateRoomDialog from '../components/CreateRoomDialog'
@@ -9,16 +9,8 @@ import { LogoMark } from '../components/Logo'
 import RoomCard from '../components/RoomCard'
 import { useDebounced } from '../hooks/useDebounced'
 import { useRoomConfig } from '../hooks/useRoomConfig'
-import { roomsApi, type RoomFilters, type RoomView } from '../lib/rooms'
-
-/**
- * Rooms are ephemeral, so the list goes stale, but every refresh costs the server a few Redis reads PER ROOM
- * per open lobby. So: a slow background refresh, only while this tab is actually visible, one more when the
- * person comes back to the tab, and a button for "I want it now".
- */
-const POLL_MS = 30_000
-/** coming back to the tab refreshes only if the list is at least this old */
-const STALE_MS = 10_000
+import { useRoomList } from '../hooks/useRoomList'
+import type { RoomFilters } from '../lib/rooms'
 
 export default function LobbyPage() {
   const navigate = useNavigate()
@@ -32,53 +24,8 @@ export default function LobbyPage() {
     hasSpace: false,
   })
   const applied = useDebounced(filters, 300)
-  const [rooms, setRooms] = useState<RoomView[] | null>(null)
-  const [loadError, setLoadError] = useState(false)
-
-  const [refreshing, setRefreshing] = useState(false)
-  const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve())
-
-  useEffect(() => {
-    let cancelled = false
-    let inFlight: Promise<void> | null = null
-    let loadedAt = 0
-
-    // One request at a time: a button press during a background refresh just joins it.
-    const load = (): Promise<void> => {
-      if (inFlight) return inFlight
-      setRefreshing(true)
-      inFlight = (async () => {
-        try {
-          const list = await roomsApi.list(applied)
-          if (cancelled) return
-          setRooms(list)
-          setLoadError(false)
-          loadedAt = Date.now()
-        } catch {
-          if (!cancelled) setLoadError(true)
-        } finally {
-          inFlight = null
-          if (!cancelled) setRefreshing(false)
-        }
-      })()
-      return inFlight
-    }
-    refreshRef.current = load
-    void load()
-
-    const id = setInterval(() => {
-      if (!document.hidden) void load()
-    }, POLL_MS)
-    const onVisible = () => {
-      if (!document.hidden && Date.now() - loadedAt > STALE_MS) void load()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [applied])
+  // Rooms are ephemeral, so the list is kept fresh while the lobby is open (and on demand: Refresh).
+  const { rooms, loadError, refreshing, refresh } = useRoomList(applied)
 
   const filtering = Boolean(
     filters.q || filters.language || filters.purpose || filters.tags || filters.hasSpace,
@@ -104,12 +51,12 @@ export default function LobbyPage() {
           <div className="page-actions">
             <button
               type="button"
-              className={`btn btn-outline btn-lg${refreshing ? ' is-spinning' : ''}`}
+              className="btn btn-outline btn-lg"
               disabled={refreshing}
-              aria-busy={refreshing}
-              onClick={() => void refreshRef.current()}
+              onClick={refresh}
+              aria-label="Refresh the room list"
             >
-              <RotateIcon size={18} />
+              <RotateIcon size={18} className={refreshing ? 'is-spinning' : undefined} />
               Refresh
             </button>
             <button type="button" className="btn btn-lg" disabled={!config} onClick={() => setCreating(true)}>
@@ -177,7 +124,7 @@ export default function LobbyPage() {
 
             {loadError && (
               <p className="notice notice-error" role="alert">
-                Couldn&apos;t load rooms. Check your connection, then press Refresh.
+                Couldn&apos;t load rooms. Retrying…
               </p>
             )}
             {rooms === null && !loadError && (
