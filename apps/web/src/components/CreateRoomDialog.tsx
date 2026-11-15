@@ -6,7 +6,7 @@ import { roomsApi, type RoomConfig } from '../lib/rooms'
 import { listWorldMaps, type RoomMapKey } from '../world/maps'
 import { normalizeTag, validateTag } from '../lib/validation'
 import { SelectField, TagInput, TextArea, TextField } from './form/fields'
-import { CheckIcon, GlobeIcon, LockIcon, XIcon } from './Icons'
+import { ArrowRightIcon, CheckIcon, GlobeIcon, LockIcon, XIcon } from './Icons'
 import MapThumb from './MapThumb'
 
 interface Props {
@@ -66,15 +66,21 @@ export default function CreateRoomDialog({ config, onClose }: Props) {
   }
 
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="card modal" role="dialog" aria-modal="true" aria-labelledby="create-title">
-        <div className="modal-head">
-          <h2 id="create-title">Start a room</h2>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
+    <div className="overlay overlay-flush" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="card modal modal-create" role="dialog" aria-modal="true" aria-labelledby="create-title">
+        {/* One header, two layouts. Desktop: title on the left, X on the right, Cancel / Create in the footer.
+            Phone: X on the left, centred title, and the arrow on the right does what "Create room" does. The
+            footer is hidden there, which frees the bottom of the screen for the host's "Powered by Netlify" badge. */}
+        <div className="modal-head modal-head-bar">
+          <button type="button" className="btn btn-ghost btn-icon modal-close" onClick={onClose} aria-label="Close">
             <XIcon size={18} />
           </button>
+          <h2 id="create-title">Start a room</h2>
+          <button type="submit" form="create-room-form" className="btn modal-go" disabled={submitting} aria-label="Create room">
+            {submitting ? <span className="spinner" aria-hidden="true" /> : <ArrowRightIcon size={20} />}
+          </button>
         </div>
-        <form className="modal-form" onSubmit={onSubmit} noValidate>
+        <form id="create-room-form" className="modal-form" onSubmit={onSubmit} noValidate>
           <div className="modal-body">
             <TextField
               label="Title"

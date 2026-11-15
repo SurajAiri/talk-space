@@ -347,7 +347,7 @@ function InRoom() {
       <MessageTiles messages={messages} seenId={seenId} chatOpen={chatOpen} blocked={blocked} onOpen={(from, dm) => openChat(dm ? from : undefined)} />
 
       {chatOpen && (
-        <FloatPanel id="chat" title="Chat" width={short ? 300 : 360} height={540} anchor="right" onClose={() => setChatOpen(false)}>
+        <FloatPanel id="chat" title="Chat" width={short ? 300 : 360} height={540} tall anchor="right" onClose={() => setChatOpen(false)}>
           <ChatWindow to={chatTo} onToChange={setChatTo} maxLength={config?.chatMessageMax ?? 2000} autoFocus={!coarse} />
         </FloatPanel>
       )}

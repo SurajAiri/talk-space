@@ -48,6 +48,7 @@ export default function FloatPanel({
   width = 340,
   height = 520,
   fit = false,
+  tall = false,
   anchor = 'right',
   topOffset = 64,
   headerExtra,
@@ -61,6 +62,8 @@ export default function FloatPanel({
   height?: number
   /** shrink to the content (up to `height`) instead of always being `height` tall */
   fit?: boolean
+  /** phone sheet only: fill the screen except for a strip at the top (tap it, swipe the handle, or press X to close) */
+  tall?: boolean
   /** where it first appears; after that, wherever it was last dropped */
   anchor?: 'right' | 'left'
   /** clear the top bar */
@@ -163,7 +166,9 @@ export default function FloatPanel({
           role="dialog"
           aria-label={title}
           style={{
-            [fit ? 'maxHeight' : 'height']: `min(${height}px, ${fit ? 62 : 70}dvh)`,
+            [fit ? 'maxHeight' : 'height']: tall
+              ? 'calc(100dvh - var(--sheet-top-gap))'
+              : `min(${height}px, ${fit ? 62 : 70}dvh)`,
             transform: sheetDy ? `translateY(${sheetDy}px)` : undefined,
             transition: sheetDy > 0 ? 'none' : undefined,
             zIndex: z,

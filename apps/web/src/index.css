@@ -9,6 +9,8 @@
    under dialogs. Set it to 0px if the badge is ever removed. */
 :root {
   --host-badge: 64px;
+  /* a tall phone sheet (chat) stops this far below the top: the status bar / notch plus a strip of the room you can tap to close it */
+  --sheet-top-gap: calc(env(safe-area-inset-top, 0px) + 44px);
   color-scheme: light dark;
 
   --font-display: 'Bricolage Grotesque Variable', 'Instrument Sans Variable', system-ui, sans-serif;
@@ -362,6 +364,9 @@ a.btn { text-decoration: none; }
 .modal-body { display: flex; flex-direction: column; gap: 16px; padding: 4px 24px 20px; overflow-y: auto; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); background: var(--surface-2); }
 .modal-form { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+/* "Start a room" header: on desktop the X sits on the right and the arrow button is not shown (the footer has Create room) */
+.modal-head-bar .modal-close { order: 2; }
+.modal-head-bar .modal-go { display: none; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 
@@ -1032,6 +1037,22 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
      the badge rides on top of the keyboard and keeps its room: this rule does not apply there. */
   html[data-keyboard-overlay] .overlay { padding-bottom: 16px; }
   html[data-keyboard-overlay] .modal { max-height: calc(100dvh - 32px); }
+
+  /* "Start a room" has no footer on phones (see CreateRoomDialog), so no button ever sits where the badge is:
+     the dialog may use the whole height. Only its LAST FIELDS can end up under the badge, and the body scrolls,
+     so it gets a bottom margin of the badge's height to scroll clear. */
+  .overlay.overlay-flush { padding-bottom: 16px; }
+  .overlay.overlay-flush .modal { max-height: calc(100dvh - 32px); }
+  .modal-create .modal-body { padding-bottom: calc(var(--host-badge) + 12px); }
+  html[data-keyboard-overlay] .modal-create .modal-body { padding-bottom: 20px; }
+  .modal-create .modal-foot { display: none; }
+  .modal-head-bar {
+    display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+  }
+  .modal-head-bar h2 { font-size: 1.125rem; text-align: center; }
+  .modal-head-bar .modal-close { order: 0; width: 44px; height: 44px; }
+  .modal-head-bar .modal-go { display: inline-flex; width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; }
 }
 
 /* narrow or short screens (phones, especially held sideways): icon-only controls, smaller map furniture */
