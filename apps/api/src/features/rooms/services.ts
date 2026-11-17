@@ -3,6 +3,7 @@ import { AppError } from "../../utils/errors.js";
 import type { CreateRoomInput, ListRoomsInput } from "./schemas.js";
 import { generateJoinCode } from "./ids.js";
 import * as store from "./store.js";
+import type { Avatar } from "../../config/avatar.config.js";
 import type { JoinErrorCode, Member, PeerProfile, RoomMeta, RoomView } from "./types.js";
 
 export function toView(
@@ -73,7 +74,7 @@ const fail = (code: JoinErrorCode, message: string): JoinOutcome => ({ ok: false
 export async function joinRoom(args: {
   roomId: string;
   joinCode?: string;
-  user: { id: string; name: string; username: string };
+  user: { id: string; name: string; username: string; avatar?: Avatar | null };
   socketId: string;
   sessionId?: string;
 }): Promise<JoinOutcome> {
@@ -108,6 +109,7 @@ export async function joinRoom(args: {
     id: user.id,
     name: user.name,
     username: user.username,
+    avatar: user.avatar ?? null,
     socketId,
     sessionId,
     joinedAt: Date.now(),

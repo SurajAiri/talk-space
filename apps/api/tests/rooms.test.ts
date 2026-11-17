@@ -125,6 +125,27 @@ describe("signaling and connection bookkeeping", () => {
     assert.equal(await quiet, true);
   });
 
+  test("a designed character reaches the other members from the server; nobody has one until they design it", async () => {
+    const [a, b] = await Promise.all([makeUser(), makeUser()]);
+    const design = { skin: 2, hairStyle: "pigtails", hairColor: 11, shirtStyle: "jacket", shirt: 5, pants: 1, accessory: "beanie" };
+    await db.update(schema.users).set({ avatar: design }).where(eq(schema.users.id, b.id));
+    const room = await createRoom(a.token);
+    const sa = await socketFor(a.token);
+    const sb = await socketFor(b.token);
+    const ackA = await join(sa, room.id);
+    assert.equal(ackA.self.avatar, null, "an account that never designed one has none");
+
+    const joined = next(sa, "peer:joined");
+    const ackB = await join(sb, room.id, { sessionId: sid() });
+    assert.deepEqual((await joined).avatar, design, "announced to the room with the join");
+    assert.deepEqual(ackB.self.avatar, design);
+    assert.equal(ackB.peers[0].avatar, null, "and the newcomer is told what A (no design) looks like");
+
+    const sc = await socketFor((await makeUser()).token);
+    const ackC = await join(sc, room.id, { sessionId: sid() });
+    assert.deepEqual(ackC.peers.find((p: { id: string }) => p.id === b.id).avatar, design, "late joiners get it from the member list");
+  });
+
   test("a clean leave tells everyone; the empty room is deleted", async () => {
     const [a, b] = await Promise.all([makeUser(), makeUser()]);
     const room = await createRoom(a.token);

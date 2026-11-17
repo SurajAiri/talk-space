@@ -498,3 +498,85 @@ test('re-asserting the gate every update costs the link nothing when nothing cha
     s.close()
   }
 })
+
+// ---------------------------------------------------------------- emotes and reactions
+
+test('emotes and reactions: only ids from the fixed lists get through the parser; nothing else rides along', () => {
+  assert.deepEqual(parseP2PMessage(JSON.stringify({ type: 'emote', id: 'dance' }), 100), { type: 'emote', id: 'dance' })
+  assert.deepEqual(parseP2PMessage(JSON.stringify({ type: 'react', id: 't-wow' }), 100), { type: 'react', id: 't-wow' })
+  // extra fields are dropped, not forwarded
+  assert.deepEqual(parseP2PMessage(JSON.stringify({ type: 'emote', id: 'wave', text: 'visit evil.example' }), 100), { type: 'emote', id: 'wave' })
+  for (const bad of [
+    { type: 'emote', id: 'moonwalk' },
+    { type: 'emote', id: 't-wow' }, // a reaction id is not an emote
+    { type: 'react', id: 'dance' }, // and an emote id is not a reaction
+    { type: 'react', id: '<img src=x onerror=alert(1)>' },
+    { type: 'emote', id: '__proto__' },
+    { type: 'emote', id: 7 },
+    { type: 'emote' },
+    { type: 'react', id: null },
+  ]) {
+    assert.equal(parseP2PMessage(JSON.stringify(bad), 100), null, JSON.stringify(bad))
+  }
+})
+
+test('a peer cannot flood emotes or reactions: a short burst gets through, the rest is dropped', () => {
+  const s = setup()
+  s.mgr.connect('p1', true)
+  const link = s.latest('p1')
+  // 30 is well inside the cheap global limit, so what stops them is the fx limit itself
+  for (let i = 0; i < 30; i++) link.recv({ type: i % 2 ? 'emote' : 'react', id: i % 2 ? 'dance' : 'like' })
+  const delivered = s.messages.filter((m) => m.msg.type === 'emote' || m.msg.type === 'react').length
+  assert.ok(delivered >= 1 && delivered <= 5, `expected only the burst, got ${delivered}`)
+  // fx does not use up the chat allowance
+  link.recv(chat('after'))
+  assert.equal(s.messages.filter((m) => m.msg.type === 'chat').length, 1)
+})
+
+test('blocked people neither show us emotes nor get ours', () => {
+  const s = setup()
+  s.mgr.connect('p1', true)
+  s.mgr.connect('p2', true)
+  s.mgr.setBlocked('p1', true)
+  s.latest('p1').recv({ type: 'emote', id: 'wave' })
+  assert.equal(s.messages.length, 0, 'ignored')
+  s.mgr.broadcast({ type: 'emote', id: 'cheer' })
+  s.mgr.broadcast({ type: 'react', id: 'love' })
+  assert.equal(s.latest('p1').sent.filter((x) => x.includes('"emote"') || x.includes('"react"')).length, 0)
+  assert.equal(s.latest('p2').sent.filter((x) => x.includes('"emote"') || x.includes('"react"')).length, 2)
+})
+
+test('the session plays our own emote, tells the room, and keeps us from spamming', () => {
+  const w = new WorldSession({ map, selfId: 'me' })
+  const sent: P2PMessage[] = []
+  w.attach(() => {}, undefined, (m) => sent.push(m))
+  try {
+    assert.equal(w.playEmote('dance', 1000), true)
+    assert.deepEqual(w.emotes.get('me'), { id: 'dance', at: 1000 })
+    assert.deepEqual(sent, [{ type: 'emote', id: 'dance' }])
+    assert.equal(w.playEmote('wave', 1100), false, 'too soon after the last one')
+    assert.equal(w.playEmote('wave', 1600), true)
+    assert.equal(w.playEmote('moonwalk', 5000), false, 'not on the list')
+    assert.equal(w.sendReaction('t-gg', 5000), true, 'reactions have their own cooldown')
+    assert.equal(w.sendReaction('nope', 9000), false)
+    assert.equal(sent.length, 3)
+  } finally {
+    w.close()
+  }
+})
+
+test('someone else\'s emote shows on them only, ignores unknown ids, and goes away when they leave', () => {
+  const w = new WorldSession({ map, selfId: 'me' })
+  try {
+    w.onRemoteEmote('p', 'spin', 500)
+    w.onRemoteReaction('p', 't-lol', 500)
+    w.onRemoteEmote('p', 'not-real', 600)
+    assert.deepEqual(w.emotes.get('p'), { id: 'spin', at: 500 })
+    assert.deepEqual(w.reactions.get('p'), { id: 't-lol', at: 500 })
+    assert.equal(w.emotes.has('me'), false)
+    w.onPeerLeft('p')
+    assert.equal(w.emotes.has('p') || w.reactions.has('p'), false)
+  } finally {
+    w.close()
+  }
+})

@@ -1,5 +1,358 @@
 // Ported from the GatherSpace template (pure canvas drawing, no engine dependency).
-import type { Character } from '../types.ts'
+import type { Character } from '../types.ts';
+import { emotePose, type Pose } from './pose.ts';
+import { drawReaction } from './reaction.ts';
+
+const TAU = Math.PI * 2;
+
+/** Lighten (amt > 0) or darken (amt < 0) a #rrggbb colour. */
+export function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt));
+  return `rgb(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
+}
+
+/** One arm, hanging from the shoulder and rotated by `raise` (0 down, PI/2 out to the side, PI up, negative in). */
+function drawArm(g: CanvasRenderingContext2D, char: Character, side: -1 | 1, raise: number) {
+  g.save();
+  g.translate(side * 10, -6);
+  g.rotate(-side * raise);
+  g.fillStyle = char.shirt;
+  g.fillRect(-2, 0, 4, 7);
+  g.fillStyle = char.skin;
+  g.fillRect(-2, 6.5, 4, 3.5);
+  g.restore();
+}
+
+/** Parts of the hair that sit BEHIND the head (drawn before the face): the afro's cloud, a ponytail, the hood. */
+function drawHairBehind(g: CanvasRenderingContext2D, char: Character) {
+  g.fillStyle = char.hairColor;
+  if (char.hairStyle === 'afro') {
+    g.beginPath();
+    g.arc(0, -21, 15.5, 0, TAU);
+    g.fill();
+  } else if (char.hairStyle === 'ponytail') {
+    const side = char.dir === 'left' ? 1 : -1; // the tail swings out the side you are not facing
+    if (char.dir === 'up') {
+      g.beginPath();
+      g.roundRect(-3.5, -24, 7, 17, 3.5);
+      g.fill();
+    } else {
+      g.beginPath();
+      g.roundRect(side === 1 ? 8 : -15, -24, 7, 15, 3.5);
+      g.fill();
+    }
+  } else if (char.hairStyle === 'pigtails') {
+    for (const sx of [-1, 1]) {
+      g.beginPath();
+      g.roundRect(sx * 12.5 - 3, -24, 6, 13, 3);
+      g.fill();
+    }
+  } else if (char.hairStyle === 'curly') {
+    // the curls sit around and behind the face (they used to be painted over it, hiding the eyes)
+    g.beginPath();
+    for (const [cx, cy, r] of [[0, -26, 12.5], [-10, -19, 5.5], [10, -19, 5.5], [-8, -29, 5], [8, -29, 5]] as const) {
+      g.moveTo(cx + r, cy); // a fresh start for each curl, or the path draws a line between them
+      g.arc(cx, cy, r, 0, TAU);
+    }
+    g.fill();
+  }
+}
+
+/** The shirt's pattern on top of the plain body shape. */
+function drawShirtStyle(g: CanvasRenderingContext2D, char: Character) {
+  const style = char.shirtStyle;
+  if (!style || style === 'tee') return;
+  if (char.dir === 'up' && (style === 'hoodie' || style === 'jacket')) {
+    // from behind: no pocket, strings or zip. A hoodie shows its hood, a jacket its hem.
+    g.fillStyle = shade(char.shirt, -0.16);
+    if (style === 'hoodie') {
+      g.beginPath();
+      g.roundRect(-7, -8, 14, 7, 4);
+      g.fill();
+    } else {
+      g.fillRect(-9, 4.5, 18, 1.8);
+    }
+    return;
+  }
+  g.save();
+  g.beginPath();
+  g.roundRect(-9, -8, 18, 14, 4);
+  g.clip();
+  if (style === 'stripes') {
+    g.fillStyle = 'rgba(255, 255, 255, 0.42)';
+    for (const y of [-5, -0.5, 4]) g.fillRect(-9, y, 18, 2.2);
+  } else if (style === 'hoodie') {
+    g.fillStyle = shade(char.shirt, -0.2);
+    g.beginPath();
+    g.roundRect(-6.5, 0.5, 13, 5, 2);
+    g.fill();
+    g.fillRect(-9, 5, 18, 1.5);
+    g.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    g.fillRect(-3, -7, 1.2, 5);
+    g.fillRect(1.8, -7, 1.2, 5);
+  } else if (style === 'jacket') {
+    g.fillStyle = shade(char.shirt, -0.28);
+    g.fillRect(-0.7, -8, 1.4, 14);
+    g.fillRect(-9, 4.5, 18, 1.8);
+    g.fillStyle = 'rgba(255, 255, 255, 0.34)';
+    g.beginPath();
+    g.moveTo(-0.7, -8);
+    g.lineTo(-6, -8);
+    g.lineTo(-0.7, -2);
+    g.closePath();
+    g.moveTo(0.7, -8);
+    g.lineTo(6, -8);
+    g.lineTo(0.7, -2);
+    g.closePath();
+    g.fill();
+  }
+  g.restore();
+}
+
+function drawHairFront(g: CanvasRenderingContext2D, char: Character) {
+  g.fillStyle = char.hairColor;
+  switch (char.hairStyle) {
+    case 'spiky':
+      g.beginPath();
+      g.roundRect(-11, -28, 22, 8, 4);
+      g.fill();
+      g.fillRect(-11, -24, 3, 7);
+      g.fillRect(8, -24, 3, 7);
+      break;
+    case 'bob':
+      g.beginPath();
+      g.roundRect(-11, -28, 22, 8, 5);
+      g.fill();
+      g.fillRect(-12, -24, 4, 13);
+      g.fillRect(8, -24, 4, 13);
+      break;
+    case 'long':
+      g.beginPath();
+      g.roundRect(-11, -28, 22, 8, 5);
+      g.fill();
+      g.fillRect(-12, -24, 4, 18);
+      g.fillRect(8, -24, 4, 18);
+      if (char.dir === 'up') g.fillRect(-10, -22, 20, 16);
+      break;
+    case 'curly':
+      // a row of curls across the forehead; the rest is behind the head (drawHairBehind)
+      g.beginPath();
+      for (const cx of [-7.5, -2.5, 2.5, 7.5]) {
+        g.moveTo(cx + 3.6, -25.5);
+        g.arc(cx, -25.5, 3.6, 0, TAU);
+      }
+      g.fill();
+      if (char.dir === 'up') {
+        g.beginPath();
+        g.arc(0, -17, 11, 0, TAU);
+        g.fill();
+      }
+      break;
+    case 'bun':
+      g.beginPath();
+      g.arc(0, -31, 5.5, 0, TAU);
+      g.fill();
+      g.beginPath();
+      g.roundRect(-11, -27, 22, 7, 4);
+      g.fill();
+      break;
+    case 'buzz':
+      g.beginPath();
+      g.roundRect(-10.5, -27, 21, 6, 4);
+      g.fill();
+      g.fillRect(-10.5, -23, 2, 4);
+      g.fillRect(8.5, -23, 2, 4);
+      if (char.dir === 'up') g.fillRect(-10, -23, 20, 7);
+      break;
+    case 'mohawk':
+      g.beginPath();
+      g.moveTo(-3.5, -25);
+      g.lineTo(-2.5, -35);
+      g.lineTo(-0.5, -28.5);
+      g.lineTo(1, -37);
+      g.lineTo(2.6, -29);
+      g.lineTo(4, -34);
+      g.lineTo(3.5, -25);
+      g.closePath();
+      g.fill();
+      g.fillStyle = shade(char.hairColor, -0.35);
+      g.fillRect(-10, -26, 20, 2.4);
+      break;
+    case 'ponytail':
+      g.beginPath();
+      g.roundRect(-11, -28, 22, 8, 5);
+      g.fill();
+      g.fillRect(-11.5, -24, 3.5, 8);
+      g.fillRect(8, -24, 3.5, 8);
+      break;
+    case 'afro':
+      g.beginPath();
+      g.roundRect(-10.5, -28, 21, 6, 4);
+      g.fill();
+      break;
+    case 'pigtails':
+      g.beginPath();
+      g.roundRect(-11, -28, 22, 8, 5);
+      g.fill();
+      g.fillRect(-11.5, -24, 3.5, 6);
+      g.fillRect(8, -24, 3.5, 6);
+      g.fillStyle = '#f43f5e';
+      for (const sx of [-1, 1]) g.fillRect(sx * 12.5 - 3, -24.5, 6, 2.4);
+      break;
+    case 'bald':
+      g.fillStyle = 'rgba(255, 255, 255, 0.22)';
+      g.beginPath();
+      g.ellipse(-3, -23.5, 3.2, 1.6, -0.3, 0, TAU);
+      g.fill();
+      break;
+  }
+}
+
+function drawAccessory(g: CanvasRenderingContext2D, char: Character) {
+  const front = char.dir !== 'up';
+  const ox = char.dir === 'left' ? -2 : char.dir === 'right' ? 2 : 0;
+  switch (char.accessory) {
+    case 'glasses':
+      if (!front) break;
+      g.strokeStyle = '#38bdf8';
+      g.lineWidth = 1.5;
+      g.strokeRect(-7 + ox, -18, 5, 4.5);
+      g.strokeRect(2 + ox, -18, 5, 4.5);
+      g.beginPath();
+      g.moveTo(-2 + ox, -16);
+      g.lineTo(2 + ox, -16);
+      g.stroke();
+      break;
+    case 'sunglasses':
+      if (!front) break;
+      g.fillStyle = '#0b1020';
+      g.beginPath();
+      g.roundRect(-7.5 + ox, -18.5, 6.5, 5, 1.5);
+      g.roundRect(1 + ox, -18.5, 6.5, 5, 1.5);
+      g.fill();
+      g.fillRect(-1.5 + ox, -17.5, 3, 1.4);
+      g.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      g.fillRect(-6.2 + ox, -17.6, 1.6, 1);
+      g.fillRect(2.3 + ox, -17.6, 1.6, 1);
+      break;
+    case 'headphones':
+      g.strokeStyle = '#f43f5e';
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.arc(0, -19, 12, Math.PI, 0);
+      g.stroke();
+      g.fillStyle = '#f43f5e';
+      g.fillRect(-13, -19, 3.5, 7);
+      g.fillRect(9.5, -19, 3.5, 7);
+      break;
+    case 'sunhat':
+      g.fillStyle = '#fcd34d';
+      g.beginPath();
+      g.ellipse(0, -26, 15, 4, 0, 0, TAU);
+      g.fill();
+      g.fillStyle = '#f59e0b';
+      g.beginPath();
+      g.roundRect(-8, -32, 16, 6, 3);
+      g.fill();
+      break;
+    case 'crown': {
+      const colors = ['#f472b6', '#facc15', '#60a5fa', '#f472b6'];
+      for (let i = 0; i < 4; i++) {
+        g.fillStyle = colors[i]!;
+        g.beginPath();
+        g.arc(-7.5 + i * 5, -26, 2.8, 0, TAU);
+        g.fill();
+      }
+      break;
+    }
+    case 'catEars':
+      for (const sx of [-1, 1]) {
+        g.fillStyle = char.hairStyle === 'bald' ? char.skin : char.hairColor;
+        g.beginPath();
+        g.moveTo(sx * 10.5, -25);
+        g.lineTo(sx * 9, -35);
+        g.lineTo(sx * 3, -27);
+        g.closePath();
+        g.fill();
+        g.fillStyle = '#f9a8d4';
+        g.beginPath();
+        g.moveTo(sx * 8.8, -27);
+        g.lineTo(sx * 8.2, -32.5);
+        g.lineTo(sx * 5, -27.5);
+        g.closePath();
+        g.fill();
+      }
+      break;
+    case 'headband':
+      g.fillStyle = '#f43f5e';
+      g.fillRect(-10.5, -25, 21, 3);
+      g.beginPath();
+      g.moveTo(10.5, -25.5);
+      g.arc(7.5, -25.5, 3, 0, TAU);
+      g.moveTo(13.2, -27);
+      g.arc(11, -27, 2.2, 0, TAU);
+      g.fill();
+      break;
+    case 'partyHat':
+      g.fillStyle = '#a855f7';
+      g.beginPath();
+      g.moveTo(-7, -26);
+      g.lineTo(0, -41);
+      g.lineTo(7, -26);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#facc15';
+      g.fillRect(-4.6, -31, 2, 2);
+      g.fillRect(1.6, -35, 2, 2);
+      g.fillRect(-0.4, -29, 2, 2);
+      g.beginPath();
+      g.arc(0, -41.5, 2.6, 0, TAU);
+      g.fill();
+      break;
+    case 'beanie':
+      g.fillStyle = '#38bdf8';
+      g.beginPath();
+      g.roundRect(-11, -31, 22, 10, 6);
+      g.fill();
+      g.fillStyle = '#0ea5e9';
+      g.beginPath();
+      g.roundRect(-11.5, -25, 23, 4, 2);
+      g.fill();
+      g.fillStyle = '#f8fafc';
+      g.beginPath();
+      g.arc(0, -32.5, 3.2, 0, TAU);
+      g.fill();
+      break;
+    case 'flower':
+      g.fillStyle = '#f9a8d4';
+      for (let i = 0; i < 5; i++) {
+        g.beginPath();
+        g.arc(8.5 + Math.cos((i * TAU) / 5) * 2.8, -25 + Math.sin((i * TAU) / 5) * 2.8, 2.1, 0, TAU);
+        g.fill();
+      }
+      g.fillStyle = '#facc15';
+      g.beginPath();
+      g.arc(8.5, -25, 1.8, 0, TAU);
+      g.fill();
+      break;
+    case 'bowtie':
+      g.fillStyle = '#ef4444';
+      g.beginPath();
+      g.moveTo(0, -6.5);
+      g.lineTo(-6, -9.5);
+      g.lineTo(-6, -3.5);
+      g.closePath();
+      g.moveTo(0, -6.5);
+      g.lineTo(6, -9.5);
+      g.lineTo(6, -3.5);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#b91c1c';
+      g.fillRect(-1.6, -8.2, 3.2, 3.4);
+      break;
+  }
+}
 
 export function drawCharacter(
   g: CanvasRenderingContext2D,
@@ -14,8 +367,14 @@ export function drawCharacter(
   g.scale(scale, scale);
 
   const isSitting = Boolean(char.sittingSeat);
+  const pose: Pose | null = char.emote ? emotePose(char.emote.id, char.emote.age) : null;
+  // seated people can wave and clap but not leap about: keep their arms, drop the body movement
+  const bodyPose = pose && !isSitting ? pose : null;
+
   const bounce = char.dancing
     ? Math.abs(Math.sin(time * 0.015)) * -7
+    : bodyPose
+    ? bodyPose.bob
     : char.moving
     ? Math.abs(Math.sin(char.walkFrame * 0.35)) * -3
     : Math.sin(time * 0.003 + (char.id.length * 1.7)) * -1;
@@ -24,18 +383,24 @@ export function drawCharacter(
 
   g.fillStyle = 'rgba(15, 23, 42, 0.35)';
   g.beginPath();
-  g.ellipse(0, 14, 12, 5, 0, 0, Math.PI * 2);
+  g.ellipse(0, 14, 12, 5, 0, 0, TAU);
   g.fill();
 
   if (char.isPlayer) {
     g.strokeStyle = 'rgba(52, 211, 153, 0.8)';
     g.lineWidth = 2;
     g.beginPath();
-    g.ellipse(0, 14, 15, 6.5, 0, 0, Math.PI * 2);
+    g.ellipse(0, 14, 15, 6.5, 0, 0, TAU);
     g.stroke();
   }
 
-  g.translate(0, bounce);
+  g.translate(bodyPose ? bodyPose.sway : 0, bounce);
+  if (bodyPose?.tilt) {
+    g.translate(0, 12);
+    g.rotate(bodyPose.tilt);
+    g.translate(0, -12);
+  }
+  if (bodyPose && bodyPose.spin !== null) g.scale(Math.cos(bodyPose.spin * TAU) || 0.02, 1);
 
   g.fillStyle = char.pants || '#1e293b';
   if (isSitting) {
@@ -52,6 +417,15 @@ export function drawCharacter(
     g.fillRect(1, 11 - legSwing * 0.5, 5, 3);
   }
 
+  // hood and hair that sit behind the body/head come first
+  if (char.shirtStyle === 'hoodie') {
+    g.fillStyle = shade(char.shirt, -0.12);
+    g.beginPath();
+    g.roundRect(-10, -12, 20, 8, 5);
+    g.fill();
+  }
+  drawHairBehind(g, char);
+
   g.fillStyle = char.shirt;
   g.beginPath();
   g.roundRect(-9, -8, 18, 14, 4);
@@ -59,14 +433,20 @@ export function drawCharacter(
 
   g.fillStyle = 'rgba(255,255,255,0.22)';
   g.fillRect(-4, -8, 8, 2);
+  drawShirtStyle(g, char);
 
-  const armSwing = char.dancing ? Math.sin(time * 0.02) * 6 : char.moving ? -legSwing : 0;
-  g.fillStyle = char.shirt;
-  g.fillRect(-12, -6 + armSwing * 0.4, 4, 10);
-  g.fillRect(8, -6 - armSwing * 0.4, 4, 10);
-  g.fillStyle = char.skin;
-  g.fillRect(-12, 2 + armSwing * 0.4, 4, 3);
-  g.fillRect(8, 2 - armSwing * 0.4, 4, 3);
+  if (pose && (pose.armL !== null || pose.armR !== null)) {
+    drawArm(g, char, -1, pose.armL ?? 0);
+    drawArm(g, char, 1, pose.armR ?? 0);
+  } else {
+    const armSwing = char.dancing ? Math.sin(time * 0.02) * 6 : char.moving ? -legSwing : 0;
+    g.fillStyle = char.shirt;
+    g.fillRect(-12, -6 + armSwing * 0.4, 4, 10);
+    g.fillRect(8, -6 - armSwing * 0.4, 4, 10);
+    g.fillStyle = char.skin;
+    g.fillRect(-12, 2 + armSwing * 0.4, 4, 3);
+    g.fillRect(8, 2 - armSwing * 0.4, 4, 3);
+  }
 
   g.fillStyle = char.skin;
   g.beginPath();
@@ -87,82 +467,21 @@ export function drawCharacter(
     g.fillRect(-4.5 + eyeOffsetX, -17, 1, 1);
     g.fillRect(3 + eyeOffsetX, -17, 1, 1);
 
-    g.fillStyle = '#7c2d12';
-    g.fillRect(-2 + eyeOffsetX, -12, 4, 1.5);
-  }
-
-  g.fillStyle = char.hairColor;
-  if (char.hairStyle === 'spiky') {
-    g.beginPath();
-    g.roundRect(-11, -28, 22, 8, 4);
-    g.fill();
-    g.fillRect(-11, -24, 3, 7);
-    g.fillRect(8, -24, 3, 7);
-  } else if (char.hairStyle === 'bob') {
-    g.beginPath();
-    g.roundRect(-11, -28, 22, 8, 5);
-    g.fill();
-    g.fillRect(-12, -24, 4, 13);
-    g.fillRect(8, -24, 4, 13);
-  } else if (char.hairStyle === 'long') {
-    g.beginPath();
-    g.roundRect(-11, -28, 22, 8, 5);
-    g.fill();
-    g.fillRect(-12, -24, 4, 18);
-    g.fillRect(8, -24, 4, 18);
-    if (char.dir === 'up') g.fillRect(-10, -22, 20, 16);
-  } else if (char.hairStyle === 'curly') {
-    g.beginPath();
-    g.arc(0, -25, 12, 0, Math.PI * 2);
-    g.arc(-9, -20, 6, 0, Math.PI * 2);
-    g.arc(9, -20, 6, 0, Math.PI * 2);
-    g.fill();
-  } else if (char.hairStyle === 'bun') {
-    g.beginPath();
-    g.arc(0, -31, 5.5, 0, Math.PI * 2);
-    g.fill();
-    g.beginPath();
-    g.roundRect(-11, -27, 22, 7, 4);
-    g.fill();
-  }
-
-  if (char.accessory === 'glasses' && char.dir !== 'up') {
-    const ox = char.dir === 'left' ? -2 : char.dir === 'right' ? 2 : 0;
-    g.strokeStyle = '#38bdf8';
-    g.lineWidth = 1.5;
-    g.strokeRect(-7 + ox, -18, 5, 4.5);
-    g.strokeRect(2 + ox, -18, 5, 4.5);
-    g.beginPath();
-    g.moveTo(-2 + ox, -16);
-    g.lineTo(2 + ox, -16);
-    g.stroke();
-  } else if (char.accessory === 'headphones') {
-    g.strokeStyle = '#f43f5e';
-    g.lineWidth = 2.5;
-    g.beginPath();
-    g.arc(0, -19, 12, Math.PI, 0);
-    g.stroke();
-    g.fillStyle = '#f43f5e';
-    g.fillRect(-13, -19, 3.5, 7);
-    g.fillRect(9.5, -19, 3.5, 7);
-  } else if (char.accessory === 'sunhat') {
-    g.fillStyle = '#fcd34d';
-    g.beginPath();
-    g.ellipse(0, -26, 15, 4, 0, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#f59e0b';
-    g.beginPath();
-    g.roundRect(-8, -32, 16, 6, 3);
-    g.fill();
-  } else if (char.accessory === 'crown') {
-    const colors = ['#f472b6', '#facc15', '#60a5fa', '#f472b6'];
-    for (let i = 0; i < 4; i++) {
-      g.fillStyle = colors[i];
+    if (pose?.laugh) {
+      g.fillStyle = '#7f1d1d';
       g.beginPath();
-      g.arc(-7.5 + i * 5, -26, 2.8, 0, Math.PI * 2);
+      g.ellipse(eyeOffsetX, -11.2, 2.8, 2.2, 0, 0, TAU);
       g.fill();
+      g.fillStyle = '#fb7185';
+      g.fillRect(-1.2 + eyeOffsetX, -10.4, 2.4, 1);
+    } else {
+      g.fillStyle = '#7c2d12';
+      g.fillRect(-2 + eyeOffsetX, -12, 4, 1.5);
     }
   }
+
+  drawHairFront(g, char);
+  drawAccessory(g, char);
 
   g.restore();
 }
@@ -340,28 +659,7 @@ export function drawCharacterOverlays(
     topOffset = by - 8;
   }
 
-  if (char.reaction && char.reaction.timer > 0) {
-    const r = char.reaction;
-    r.scale = Math.min(1, r.scale + 0.12);
-    const bob = Math.sin(time * 0.01) * 3;
-    g.save();
-    g.translate(0, topOffset - 18 + bob);
-    g.scale(r.scale, r.scale);
-
-    g.fillStyle = 'rgba(255, 255, 255, 0.96)';
-    g.beginPath();
-    g.arc(0, 0, 16, 0, Math.PI * 2);
-    g.fill();
-    g.strokeStyle = '#10b981';
-    g.lineWidth = 2;
-    g.stroke();
-
-    g.font = '18px sans-serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(r.emoji, 0, 1);
-    g.restore();
-  }
+  if (char.reaction && char.reaction.timer > 0) drawReaction(g, char.reaction, topOffset, time);
 
   g.restore();
 }

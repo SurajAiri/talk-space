@@ -294,6 +294,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
       world.attach(
         (msg) => void mgr.sendPosition(msg),
         (id, on) => mgr.setPeerAudio(id, on),
+        (msg) => void mgr.broadcast(msg),
       )
     }
     applyBlocks(mgr)
@@ -335,6 +336,8 @@ export const useRoomStore = create<RoomState>()((set, get) => {
   function handlePeerMessage(from: string, msg: P2PMessage) {
     if (msg.type === 'presence') return updatePeer(from, { muted: msg.muted })
     if (msg.type === 'pos') return world?.onRemotePosition(from, msg)
+    if (msg.type === 'emote') return world?.onRemoteEmote(from, msg.id)
+    if (msg.type === 'react') return world?.onRemoteReaction(from, msg.id)
 
     // A peer chooses its own message id: never let it show the same one twice.
     const key = `${from}:${msg.id}`

@@ -5,9 +5,12 @@ import {
   pgEnum,
   pgTable,
   text,
+  jsonb,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import type { Avatar } from "../../config/avatar.config.js";
 
 export const userTypeEnum = pgEnum("user_type", ["user", "admin"]);
 export const userStatusEnum = pgEnum("user_status", [
@@ -31,6 +34,8 @@ export const users = pgTable("users", {
   // null for users who signed up with Google
   passwordHash: text("password_hash"),
   bio: text("bio"), // <= 200 chars
+  // The character they designed (config/avatar.config.ts). null = the look generated from their id.
+  avatar: jsonb("avatar").$type<Avatar>(),
   // null until the person answers during onboarding
   gender: genderEnum("gender"),
   spokenLanguages: text("spoken_languages").array().notNull().default([]),

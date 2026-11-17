@@ -11,6 +11,7 @@ import FloatPanel from '../components/room/FloatPanel'
 import HearingChip from '../components/room/HearingChip'
 import Joystick from '../components/room/Joystick'
 import MiniMap from '../components/room/MiniMap'
+import ReactionDock from '../components/room/ReactionDock'
 import MessageTiles from '../components/room/MessageTiles'
 import RoomTopBar from '../components/room/RoomTopBar'
 import WorldView from '../components/WorldView'
@@ -343,6 +344,7 @@ function InRoom() {
         </div>
       )}
       {world && <MiniMap session={world} />}
+      {world && <ReactionDock session={world} />}
       {world && coarse && <Joystick session={world} />}
       <MoveHint coarse={coarse} />
 

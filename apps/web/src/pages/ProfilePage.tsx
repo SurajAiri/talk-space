@@ -21,11 +21,14 @@ import {
   UserIcon,
   ZapIcon,
 } from '../components/Icons'
+import CharacterCanvas from '../components/CharacterCanvas'
+import AvatarDialog from '../components/profile/AvatarDialog'
 import ChangePasswordDialog from '../components/profile/ChangePasswordDialog'
 import EditProfileDialog from '../components/profile/EditProfileDialog'
 import { useProfileOptions } from '../hooks/useProfileOptions'
 import { PRIVACY_POLICY_PATH } from '../lib/legal'
 import { genderLabel, languageNames } from '../lib/profile'
+import { lookFor } from '../world/avatar'
 import { useAuthStore } from '../store/auth.store'
 
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
@@ -95,7 +98,7 @@ export default function ProfilePage() {
   const logout = useAuthStore((s) => s.logout)
   const logoutEverywhere = useAuthStore((s) => s.logoutEverywhere)
   const { options, retry } = useProfileOptions()
-  const [dialog, setDialog] = useState<'edit' | 'password' | null>(null)
+  const [dialog, setDialog] = useState<'edit' | 'password' | 'avatar' | null>(null)
 
   if (!user) return null
 
@@ -199,6 +202,28 @@ export default function ProfilePage() {
             <aside className="pcol">
               <section className="psec">
                 <header className="psec-head">
+                  <h2>My character</h2>
+                  <button type="button" className="btn btn-ghost btn-small" onClick={() => setDialog('avatar')}>
+                    <PencilIcon size={14} />
+                    Customise
+                  </button>
+                </header>
+                <div className="pchar">
+                  <span className="pchar-stage">
+                    <CharacterCanvas look={lookFor(user.id, user.avatar)} size={132} animate label="Your character" />
+                  </span>
+                  <div className="pchar-text">
+                    <p>{user.avatar ? 'This is how you look in rooms.' : 'Your look is made for you. Design your own: hair, outfit, accessories.'}</p>
+                    <button type="button" className="btn btn-small" onClick={() => setDialog('avatar')}>
+                      <SparklesIcon size={15} />
+                      {user.avatar ? 'Change look' : 'Design your character'}
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="psec">
+                <header className="psec-head">
                   <h2>Standing</h2>
                 </header>
                 <div className="pstats">
@@ -292,6 +317,7 @@ export default function ProfilePage() {
 
       {dialog === 'edit' && options && <EditProfileDialog user={user} options={options} onClose={() => setDialog(null)} />}
       {dialog === 'password' && <ChangePasswordDialog onClose={() => setDialog(null)} />}
+      {dialog === 'avatar' && <AvatarDialog user={user} onClose={() => setDialog(null)} />}
     </div>
   )
 }

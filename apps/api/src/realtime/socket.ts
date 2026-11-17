@@ -133,7 +133,7 @@ export function createSocketServer(httpServer: HttpServer) {
       if (state.status !== "active") return next(new Error("ACCOUNT_" + state.status.toUpperCase()));
       const user = await findUserById(auth.id);
       if (!user) return next(new Error("UNAUTHORIZED"));
-      socket.data.user = { id: user.id, name: user.name, username: user.username };
+      socket.data.user = { id: user.id, name: user.name, username: user.username, avatar: user.avatar ?? null };
       const now = Date.now();
       socket.data.signalWindowStart = now;
       socket.data.signalCount = 0;

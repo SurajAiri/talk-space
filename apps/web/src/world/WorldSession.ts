@@ -1,4 +1,5 @@
-import type { PosMessage } from '../webrtc/types.ts'
+import type { P2PMessage, PosMessage } from '../webrtc/types.ts'
+import { emoteById, reactionById } from './fx.ts'
 import { hearingGain, zoneAt } from './hearing.ts'
 import { isTileBlocked } from './navigation.ts'
 import { ProximityMixer } from './ProximityMixer.ts'
@@ -41,6 +42,14 @@ export interface Bubble {
   at: number
   until: number
 }
+/** An emote or reaction on someone's character: which one (world/fx.ts) and when it started (performance.now() ms). */
+export interface ActiveFx {
+  id: string
+  at: number
+}
+/** Quickest you can fire the same kind of effect again, so holding a button down cannot flood the room. */
+const FX_COOLDOWN_MS = 450
+
 const BUBBLE_MIN_MS = 3500
 const BUBBLE_MAX_MS = 8000
 const BUBBLE_MS_PER_CHAR = 55 // roughly reading speed, plus a base for noticing it
@@ -62,6 +71,11 @@ export class WorldSession {
   readonly local: PositionState
   /** personId -> what they just said (newest only). The engine draws it; chat feeds it. */
   readonly bubbles = new Map<string, Bubble>()
+  /** personId -> the animation they are playing right now (newest only). The engine plays it; the UI and network start it. */
+  readonly emotes = new Map<string, ActiveFx>()
+  /** personId -> the emoji or big word floating over their head right now (newest only). */
+  readonly reactions = new Map<string, ActiveFx>()
+  readonly selfId: string
   /** On-screen joystick, -1..1 on each axis (0,0 = released). Written by the UI, read by the engine. */
   readonly joystick = { x: 0, y: 0 }
   /** The part of the map on screen, in tile units (centre and size). Written by the engine every frame, read by the minimap. */
@@ -69,6 +83,9 @@ export class WorldSession {
   private walkRequest: { col: number; row: number } | null = null
 
   private send: ((msg: PosMessage) => void) | null = null
+  private broadcast: ((msg: P2PMessage) => void) | null = null
+  private lastEmoteAt = -Infinity
+  private lastReactionAt = -Infinity
   private audioGate: ((id: string, on: boolean) => void) | null = null
   private blocked: ReadonlySet<string> = new Set()
   private readonly remoteSeenAt = new Map<string, number>()
@@ -84,6 +101,7 @@ export class WorldSession {
 
   constructor(opts: { map: WorldMap; selfId: string }) {
     this.map = opts.map
+    this.selfId = opts.selfId
     const spawn = pickSpawn(opts.map, opts.selfId)
     this.local = { x: spawn.col + 0.5, y: spawn.row + 0.5, dir: 'down', moving: false }
     this.timer = setInterval(() => this.tick(), TICK_MS)
@@ -102,8 +120,9 @@ export class WorldSession {
   }
 
   /** (Re)bind to a fresh network. Anything learned from the old one is stale. */
-  attach(send: (msg: PosMessage) => void, audioGate?: (id: string, on: boolean) => void) {
+  attach(send: (msg: PosMessage) => void, audioGate?: (id: string, on: boolean) => void, broadcast?: (msg: P2PMessage) => void) {
     this.send = send
+    this.broadcast = broadcast ?? null
     this.audioGate = audioGate ?? null
     this.lastSent = null // force an immediate broadcast to the new peers
     this.clearRemotes()
@@ -112,6 +131,7 @@ export class WorldSession {
   /** Network is gone (reconnecting). Peers are unknown until we re-join. */
   detach() {
     this.send = null
+    this.broadcast = null
     this.audioGate = null
     this.clearRemotes()
   }
@@ -164,6 +184,33 @@ export class WorldSession {
     this.mixer.setDeafened(deafened)
   }
 
+  /** Play an emote on OUR character and tell the room. False if it is not on the list or came too soon after the last one. */
+  playEmote(id: string, now = performance.now()): boolean {
+    if (!emoteById(id) || now - this.lastEmoteAt < FX_COOLDOWN_MS) return false
+    this.lastEmoteAt = now
+    this.emotes.set(this.selfId, { id, at: now })
+    this.broadcast?.({ type: 'emote', id })
+    return true
+  }
+
+  /** Float a reaction over OUR head and tell the room. Same rules as playEmote. */
+  sendReaction(id: string, now = performance.now()): boolean {
+    if (!reactionById(id) || now - this.lastReactionAt < FX_COOLDOWN_MS) return false
+    this.lastReactionAt = now
+    this.reactions.set(this.selfId, { id, at: now })
+    this.broadcast?.({ type: 'react', id })
+    return true
+  }
+
+  /** Someone else's emote/reaction arrived (already checked against the fixed lists and rate limits). */
+  onRemoteEmote(id: string, emote: string, now = performance.now()) {
+    if (emoteById(emote)) this.emotes.set(id, { id: emote, at: now })
+  }
+
+  onRemoteReaction(id: string, reaction: string, now = performance.now()) {
+    if (reactionById(reaction)) this.reactions.set(id, { id: reaction, at: now })
+  }
+
   setJoystick(x: number, y: number) {
     this.joystick.x = x
     this.joystick.y = y
@@ -179,6 +226,8 @@ export class WorldSession {
 
   onPeerLeft(id: string) {
     this.bubbles.delete(id)
+    this.emotes.delete(id)
+    this.reactions.delete(id)
     this.remotes.delete(id)
     this.remoteSeenAt.delete(id)
     this.gated.delete(id)
@@ -200,6 +249,8 @@ export class WorldSession {
     this.listeners.clear()
     this.remotes.clear()
     this.bubbles.clear()
+    this.emotes.clear()
+    this.reactions.clear()
     this.mixer.close()
   }
 

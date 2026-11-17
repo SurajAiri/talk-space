@@ -36,6 +36,13 @@
       "when": 1793542348944,
       "tag": "0004_user_privacy_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794799622263,
+      "tag": "0005_user_avatar",
+      "breakpoints": true
     }
   ]
 }

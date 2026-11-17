@@ -1,3 +1,4 @@
+import type { AvatarConfig } from '../world/avatar'
 import { api, type Gender, type User } from './api'
 import { useAuthStore } from '../store/auth.store'
 import type { Option } from './rooms'
@@ -30,6 +31,8 @@ export interface OnboardingInput {
 export type ProfilePatch = Partial<{
   name: string
   username: string
+  /** null goes back to the look generated from the account id */
+  avatar: AvatarConfig | null
   gender: Gender
   bio: string
   spokenLanguages: string[]

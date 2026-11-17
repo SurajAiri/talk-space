@@ -18,7 +18,10 @@ export default function WorldView({ session }: { session: WorldSession }) {
       session,
       selfId,
       // read every frame, outside React: the engine must not re-render the page
-      getSelf: () => ({ name: useAuthStore.getState().user?.name ?? 'You', muted: useRoomStore.getState().muted }),
+      getSelf: () => {
+        const user = useAuthStore.getState().user
+        return { name: user?.name ?? 'You', muted: useRoomStore.getState().muted, avatar: user?.avatar }
+      },
       getPeers: () => useRoomStore.getState().peers,
     })
     engine.start()

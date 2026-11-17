@@ -42,6 +42,8 @@ const LIMITS = {
   chat: { capacity: 8, perSecond: 2 },
   pos: { capacity: 40, perSecond: 25 },
   presence: { capacity: 10, perSecond: 2 },
+  /** emotes and reactions: a burst of a few, then about one a second */
+  fx: { capacity: 4, perSecond: 1.2 },
 } as const
 /** More than this many dropped/invalid messages inside the window and the peer is reported as abusive. */
 const ABUSE_DROPS = 150
@@ -62,6 +64,7 @@ interface PeerBudget {
   chat: TokenBucket
   pos: TokenBucket
   presence: TokenBucket
+  fx: TokenBucket
   drops: WindowCounter
   lastAbuseReport: number
 }
@@ -148,6 +151,7 @@ export class NetworkManager {
         chat: mk(LIMITS.chat),
         pos: mk(LIMITS.pos),
         presence: mk(LIMITS.presence),
+        fx: mk(LIMITS.fx),
         drops: new WindowCounter(ABUSE_WINDOW_MS, this.now),
         lastAbuseReport: -Infinity,
       }
@@ -174,7 +178,7 @@ export class NetworkManager {
     const msg = parseP2PMessage(raw, this.opts.chatMax)
     if (!msg) return this.drop(peerId, 'garbage')
 
-    const bucket = msg.type === 'chat' ? b.chat : msg.type === 'pos' ? b.pos : b.presence
+    const bucket = msg.type === 'chat' ? b.chat : msg.type === 'pos' ? b.pos : msg.type === 'emote' || msg.type === 'react' ? b.fx : b.presence
     if (!bucket.take()) return this.drop(peerId, 'flooding')
     this.opts.handlers.onPeerMessage(peerId, msg)
   }
@@ -317,7 +321,8 @@ export class NetworkManager {
   /** Sends to every connected peer (except blocked ones); returns how many it reached. */
   broadcast(msg: P2PMessage): number {
     const raw = JSON.stringify(msg)
-    const sendable = msg.type !== 'chat' // blocked people get no chat from us, but do see presence
+    // blocked people get no chat, emotes or reactions from us, but do see presence
+    const sendable = msg.type !== 'chat' && msg.type !== 'emote' && msg.type !== 'react'
     let reached = 0
     for (const [id, link] of this.links) {
       if (!sendable && this.blocked.has(id)) continue

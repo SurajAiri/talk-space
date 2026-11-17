@@ -12,6 +12,7 @@ const ownProfile = {
   username: users.username,
   email: users.email,
   bio: users.bio,
+  avatar: users.avatar,
   gender: users.gender,
   spokenLanguages: users.spokenLanguages,
   interests: users.interests,

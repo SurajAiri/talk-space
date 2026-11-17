@@ -78,9 +78,23 @@ export interface Character {
   hairStyle: string
   hairColor: string
   shirt: string
+  /** tee | hoodie | stripes | jacket (absent = tee) */
+  shirtStyle?: string
   pants: string
   accessory: string
+  /** The animation being played right now (world/fx.ts), `age` = ms since it started. */
+  emote?: { id: string; age: number } | null
   /** `age` and `timer` (time left) are in ms; `dm` = a private message. */
   speechBubble: { text: string; dm: boolean; age: number; timer: number } | null
-  reaction: { emoji: string; timer: number; scale: number } | null
+  reaction: Reaction | null
+}
+
+/** An emoji burst or a word in big animated letters above someone's head (world/fx.ts). Times in ms. */
+export interface Reaction {
+  kind: 'emoji' | 'text'
+  text: string
+  style: string
+  color: string
+  age: number
+  timer: number
 }

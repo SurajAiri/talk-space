@@ -1,3 +1,4 @@
+import type { Avatar } from "../../config/avatar.config.js";
 import type { Purpose, Visibility } from "../../config/rooms.config.js";
 
 /** Stored in Redis at room:{id} (JSON). Immutable after creation. */
@@ -23,13 +24,15 @@ export interface Member {
   id: string;
   name: string;
   username: string;
+  /** their designed character; null/absent = the look generated from their id */
+  avatar?: Avatar | null;
   socketId: string;
   /** which browser tab (page load) holds the seat; see joinPayloadSchema */
   sessionId?: string;
   joinedAt: number;
 }
 
-export type PeerProfile = Pick<Member, "id" | "name" | "username">;
+export type PeerProfile = Pick<Member, "id" | "name" | "username" | "avatar">;
 
 /** What clients see. joinCode only goes to people already inside / the creator. */
 export interface RoomView {

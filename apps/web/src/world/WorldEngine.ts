@@ -1,4 +1,5 @@
-import { appearanceFor } from './appearance.ts'
+import { lookFor } from './avatar.ts'
+import { emoteById, reactionById, REACTION_MS } from './fx.ts'
 import { clampZoom, fitZoom, wheelZoomFactor, zoomLimits, type ZoomLimits } from './camera.ts'
 import { HEARING, hearingGain, zoneAt } from './hearing.ts'
 import { findPath, isTileBlocked, type Waypoint } from './navigation.ts'
@@ -24,6 +25,8 @@ const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowlef
 export interface PeerLabel {
   name: string
   muted: boolean
+  /** their designed character (see world/avatar.ts); null/absent = the look generated from their id */
+  avatar?: unknown
 }
 
 export interface EngineOptions {
@@ -65,6 +68,8 @@ export class WorldEngine {
   private camera: { x: number; y: number }
   private view = { x: 0, y: 0 } // clamped camera centre of the last frame (for click -> world mapping)
   private zoom = 1
+  private readonly appliedAvatar = new Map<string, unknown>()
+  private lastEmoteAt = -1
   private limits: ZoomLimits = { min: 0.5, max: 1.8 } // set for real in resize(): they depend on the screen and the map
   private readonly night: Prop[] // props that throw light or hang overhead (empty on daytime maps)
   private userZoomed = false // once someone zooms by hand, stop re-fitting on resize/rotation
@@ -104,7 +109,7 @@ export class WorldEngine {
       sittingSeat: null,
       speechBubble: null,
       reaction: null,
-      ...appearanceFor(opts.selfId),
+      ...lookFor(opts.selfId, opts.getSelf().avatar),
     }
     this.camera = { x: this.player.x, y: this.player.y }
     this.view = { ...this.camera }
@@ -348,6 +353,7 @@ export class WorldEngine {
 
     this.updateRemotes(dt)
     this.applyBubbles(performance.now())
+    this.applyFx(performance.now())
 
     const walk = this.session.takeWalkRequest()
     if (walk) this.walkToTile(walk.col, walk.row)
@@ -356,6 +362,41 @@ export class WorldEngine {
     this.camera.x += (p.x - this.camera.x) * cam
     this.camera.y += (p.y - this.camera.y) * cam
     if (this.marker && (this.marker.age += dt) > 0.8) this.marker = null
+  }
+
+  /**
+   * Copy the emotes and reactions in play (WorldSession) onto the characters that get drawn. Walking ends an
+   * emote for everyone (a remote person's `moving` comes from their position messages), and starting one
+   * stops our own click-to-move path so it does not walk us out of it at once.
+   */
+  private applyFx(now: number) {
+    const set = (c: Character) => {
+      const e = this.session.emotes.get(c.id)
+      const def = e ? emoteById(e.id) : undefined
+      if (e && def && now - e.at < def.ms && !c.moving) {
+        c.emote = { id: e.id, age: now - e.at }
+      } else {
+        if (e) this.session.emotes.delete(c.id)
+        c.emote = null
+      }
+
+      const r = this.session.reactions.get(c.id)
+      const rdef = r ? reactionById(r.id) : undefined
+      const total = rdef ? REACTION_MS[rdef.kind] : 0
+      if (r && rdef && now - r.at < total) {
+        c.reaction = { kind: rdef.kind, text: rdef.text, style: rdef.style, color: rdef.color, age: now - r.at, timer: total - (now - r.at) }
+      } else {
+        if (r) this.session.reactions.delete(c.id)
+        c.reaction = null
+      }
+    }
+    const mine = this.session.emotes.get(this.player.id)
+    if (mine && mine.at !== this.lastEmoteAt) {
+      this.lastEmoteAt = mine.at
+      this.path = []
+    }
+    set(this.player)
+    for (const c of this.remote.values()) set(c)
   }
 
   /** Copy what people just said (WorldSession.bubbles) onto the characters that get drawn. */
@@ -401,9 +442,10 @@ export class WorldEngine {
           sittingSeat: null,
           speechBubble: null,
           reaction: null,
-          ...appearanceFor(id),
+          ...lookFor(id, peers[id]?.avatar),
         }
         this.remote.set(id, c)
+        this.appliedAvatar.set(id, peers[id]?.avatar)
       }
       const dist = Math.hypot(tx - c.x, ty - c.y)
       if (dist > SNAP_DISTANCE) {
@@ -420,10 +462,19 @@ export class WorldEngine {
       if (c.sittingSeat) c.dir = c.sittingSeat.dir
 
       const peer = peers[id]
+      if (peer && this.appliedAvatar.get(id) !== peer.avatar) {
+        Object.assign(c, lookFor(id, peer.avatar)) // their character changed (they re-joined with a new look)
+        this.appliedAvatar.set(id, peer.avatar)
+      }
       c.name = peer?.name ?? 'Someone'
       c.status = peer?.muted === false ? 'available' : 'busy'
     }
-    for (const id of [...this.remote.keys()]) if (!this.session.remotes.has(id)) this.remote.delete(id)
+    for (const id of [...this.remote.keys()]) {
+      if (!this.session.remotes.has(id)) {
+        this.remote.delete(id)
+        this.appliedAvatar.delete(id)
+      }
+    }
   }
 
   // ---------- drawing ----------

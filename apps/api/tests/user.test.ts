@@ -180,6 +180,31 @@ describe("editing the profile", () => {
     assert.equal(bio.data.username, "ab");
   });
 
+  test("a character can be designed, read back, cleared, and nothing invalid is stored", async () => {
+    const a = await makeUser();
+    const me = () => http("/users/me", { token: a.token });
+    const patch = (avatar: unknown) => http("/users/me", { method: "PATCH", token: a.token, body: { avatar } });
+    const design = { skin: 4, hairStyle: "afro", hairColor: 7, shirtStyle: "stripes", shirt: 3, pants: 5, accessory: "crown" };
+
+    assert.equal((await me()).data.avatar, null, "nobody has a designed character until they make one");
+    const saved = await patch(design);
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.data.avatar, design);
+    assert.deepEqual((await me()).data.avatar, design, "it is kept");
+
+    assert.equal((await patch({ ...design, skin: 10 })).status, 400, "colour out of range");
+    assert.equal((await patch({ ...design, hairStyle: "rainbow" })).status, 400, "unknown style");
+    assert.equal((await patch({ skin: 1 })).status, 400, "incomplete");
+    assert.deepEqual((await me()).data.avatar, design, "refused attempts changed nothing");
+
+    const bio = await http("/users/me", { method: "PATCH", token: a.token, body: { bio: "hello" } });
+    assert.deepEqual(bio.data.avatar, design, "editing something else leaves the character alone");
+
+    const cleared = await patch(null);
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.data.avatar, null, "null goes back to the generated look");
+  });
+
   test("rejects an empty request, bad values, and ignores fields people may not change", async () => {
     const u = await makeUser();
     const patch = (body: unknown) => http("/users/me", { method: "PATCH", token: u.token, body });

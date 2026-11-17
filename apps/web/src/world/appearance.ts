@@ -1,11 +1,14 @@
 /**
- * Avatars are derived from the user id, so every client draws every person the same
- * way with ZERO network traffic and nothing a peer could spoof. A customiser (which
- * would need a validated "avatar" P2P message) can replace this later.
+ * The look people get until they design their own (world/avatar.ts): derived from the user id, so every
+ * client draws every person the same way with zero network traffic. A designed character is sent by the
+ * server with the room's member list (never by a peer), and replaces this.
+ *
+ * Do not reorder or resize these lists: they decide what everyone who has not customised looks like, and
+ * the designer's palettes start with the same colours on purpose.
  */
-const SKIN = ['#ffdbb5', '#f5c293', '#e0a370', '#c68642', '#8d5524', '#5c3818']
-const HAIR = ['#1e293b', '#451a03', '#92400e', '#eab308', '#dc2626', '#ec4899', '#06b6d4', '#e2e8f0']
-const SHIRT = ['#10b981', '#6366f1', '#f43f5e', '#f59e0b', '#06b6d4', '#a855f7', '#ec4899', '#3b82f6']
+export const SKIN = ['#ffdbb5', '#f5c293', '#e0a370', '#c68642', '#8d5524', '#5c3818']
+export const HAIR = ['#1e293b', '#451a03', '#92400e', '#eab308', '#dc2626', '#ec4899', '#06b6d4', '#e2e8f0']
+export const SHIRT = ['#10b981', '#6366f1', '#f43f5e', '#f59e0b', '#06b6d4', '#a855f7', '#ec4899', '#3b82f6']
 const STYLES = ['spiky', 'bob', 'long', 'curly', 'bun']
 const ACCESSORIES = ['none', 'none', 'none', 'glasses', 'headphones', 'sunhat', 'crown']
 
@@ -29,5 +32,6 @@ export function appearanceFor(id: string) {
     shirt: pick(SHIRT, id, 'shirt'),
     accessory: pick(ACCESSORIES, id, 'acc'),
     pants: '#1e293b',
+    shirtStyle: 'tee',
   }
 }

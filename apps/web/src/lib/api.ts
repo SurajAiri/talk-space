@@ -1,3 +1,4 @@
+import type { AvatarConfig } from '../world/avatar'
 import { API_URL } from './config'
 
 export type Gender = 'female' | 'male' | 'non_binary' | 'prefer_not_to_say'
@@ -8,6 +9,8 @@ export interface User {
   username: string
   email: string
   bio: string | null
+  /** the character they designed (world/avatar.ts); null = the look generated from their id */
+  avatar: AvatarConfig | null
   gender: Gender | null
   spokenLanguages: string[]
   interests: string[]

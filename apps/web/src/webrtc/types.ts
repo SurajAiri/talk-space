@@ -1,7 +1,12 @@
+import type { AvatarConfig } from '../world/avatar.ts'
+import { emoteById, reactionById } from '../world/fx.ts'
+
 export interface PeerInfo {
   id: string
   name: string
   username: string
+  /** their designed character, as the SERVER sent it with the member list (never from a peer); null = generated look */
+  avatar?: AvatarConfig | null
 }
 
 /** Relayed (never inspected) by the signaling server. */
@@ -17,6 +22,10 @@ export type P2PMessage =
   /** `dm`: sent to this one person only (it is only ever written to their link). */
   | { type: 'chat'; id: string; text: string; ts: number; dm?: true }
   | { type: 'presence'; muted: boolean }
+  /** play one of the animations in world/fx.ts. Only ever an id from that list. */
+  | { type: 'emote'; id: string }
+  /** float an emoji or a big animated word above my head (world/fx.ts). Only ever an id from that list. */
+  | { type: 'react'; id: string }
   | PosMessage
 
 /**
@@ -55,6 +64,10 @@ export function parseP2PMessage(raw: unknown, chatMax: number): P2PMessage | nul
   if (m.type === 'presence' && typeof m.muted === 'boolean') {
     return { type: 'presence', muted: m.muted }
   }
+  // Emotes and reactions carry nothing but the NAME of something on a fixed list: a peer can make us play
+  // "dance", never show text or an image of its own choosing.
+  if (m.type === 'emote' && emoteById(m.id)) return { type: 'emote', id: m.id as string }
+  if (m.type === 'react' && reactionById(m.id)) return { type: 'react', id: m.id as string }
   if (
     m.type === 'pos' &&
     isCoord(m.x) &&

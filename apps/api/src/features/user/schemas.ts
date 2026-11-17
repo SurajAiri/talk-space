@@ -5,6 +5,7 @@ import {
   PROFILE_LANGUAGE_VALUES,
 } from "../../config/profile.config.js";
 import { acceptPrivacyPolicy, nameField, usernameField } from "../auth/schemas.js";
+import { avatarSchema } from "./avatar.schema.js";
 
 /** Letters and digits from any alphabet, plus a few marks that real interests use ("C++", "R&B", "Rock 'n' roll"). */
 const LABEL_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} .+#&'’/-]*$/u;
@@ -68,6 +69,8 @@ export const onboardingSchema = z.object({
 export const updateProfileSchema = z.object({
   name: nameField.optional(),
   username: usernameField.optional(),
+  /** null goes back to the look generated from the account id */
+  avatar: avatarSchema.nullable().optional(),
   gender: gender.optional(),
   bio: bio.optional(),
   spokenLanguages: languages.optional(),

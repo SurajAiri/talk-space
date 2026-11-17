@@ -59,7 +59,7 @@ export async function listMembers(id: string): Promise<Member[]> {
 }
 
 export function toPeer(m: Member): PeerProfile {
-  return { id: m.id, name: m.name, username: m.username };
+  return { id: m.id, name: m.name, username: m.username, avatar: m.avatar ?? null };
 }
 
 export type JoinResult =
