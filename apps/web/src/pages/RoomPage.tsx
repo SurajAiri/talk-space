@@ -16,6 +16,7 @@ import MessageTiles from '../components/room/MessageTiles'
 import RoomTopBar from '../components/room/RoomTopBar'
 import WorldView from '../components/WorldView'
 import { useFitVisibleArea } from '../hooks/useFitVisibleArea'
+import { useMiniMapVisible } from '../hooks/useMiniMap'
 import { useRoomConfig } from '../hooks/useRoomConfig'
 import { useCoarsePointer, useShortScreen } from '../hooks/useMedia'
 import { enterFullscreen, exitFullscreen, fullscreenSupported, useIsFullscreen } from '../lib/fullscreen'
@@ -260,6 +261,7 @@ function InRoom() {
   const coarse = useCoarsePointer()
   const short = useShortScreen()
   const fullscreen = useIsFullscreen()
+  const [mapVisible, setMapVisible] = useMiniMapVisible()
   const screenRef = useRef<HTMLDivElement>(null)
   useFitVisibleArea(screenRef, Boolean(room))
 
@@ -322,7 +324,6 @@ function InRoom() {
         count={peerCount + 1}
         unread={unread}
         chatOpen={chatOpen}
-        peopleOpen={peopleOpen}
         fullscreen={fullscreen}
         canFullscreen={fullscreenSupported()}
         coarse={coarse}
@@ -330,6 +331,8 @@ function InRoom() {
         onPeople={() => (peopleOpen ? setPeopleOpen(false) : openPeople())}
         onFullscreen={() => void toggleFullscreen()}
         onLeave={() => void onLeave()}
+        reactions={world ? <ReactionDock session={world} /> : null}
+        miniMap={world ? { visible: mapVisible, onToggle: () => setMapVisible(!mapVisible) } : undefined}
       />
 
       {status === 'reconnecting' && (
@@ -343,8 +346,7 @@ function InRoom() {
           <HearingChip session={world} onClick={openPeople} />
         </div>
       )}
-      {world && <MiniMap session={world} />}
-      {world && <ReactionDock session={world} />}
+      {world && mapVisible && <MiniMap session={world} />}
       {world && coarse && <Joystick session={world} />}
       <MoveHint coarse={coarse} />
 

@@ -1,53 +1,31 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { hearingGain } from '../../world/hearing'
 import { mapThumbnail } from '../../world/thumbnail'
 import type { WorldSession } from '../../world/WorldSession'
-import { MapIcon, XIcon } from '../Icons'
 
-const KEY = 'ts.minimap'
 /** Largest the card gets, in CSS px: wide maps are limited by width, tall ones by height. */
 const MAX_W = 208
 const MAX_H = 168
-
-function initiallyOpen(): boolean {
-  try {
-    const v = localStorage.getItem(KEY)
-    if (v === 'on') return true
-    if (v === 'off') return false
-  } catch {
-    /* private mode: fall through to the default */
-  }
-  // a phone's screen is small: start closed there, open on a laptop
-  return !window.matchMedia('(pointer: coarse)').matches
-}
 
 /**
  * The whole map in a corner. It reuses the map's own picture, and draws on top: the part you are looking at,
  * the audio zones, you (white) and everyone else (green when you can hear them, grey when you can't).
  * Click or tap it to walk to that spot. It only reads the world session, exactly like the engine does.
+ * It has no buttons of its own: showing and hiding it is in the three-dot menu (see hooks/useMiniMap.ts), and
+ * the room page simply does not mount it while hidden.
  */
 export default function MiniMap({ session }: { session: WorldSession }) {
   const map = session.map
-  const [open, setOpen] = useState(initiallyOpen)
   const overlay = useRef<HTMLCanvasElement>(null)
   const image = mapThumbnail(map, MAX_W * 2)
 
   const aspect = map.cols / map.rows
   const width = Math.round(Math.min(MAX_W, MAX_H * aspect))
 
-  function toggle(next: boolean) {
-    setOpen(next)
-    try {
-      localStorage.setItem(KEY, next ? 'on' : 'off')
-    } catch {
-      /* it just won't be remembered */
-    }
-  }
-
   useEffect(() => {
     const canvas = overlay.current
     const g = canvas?.getContext('2d')
-    if (!open || !canvas || !g) return
+    if (!canvas || !g) return
     let raf = 0
     const draw = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -99,7 +77,7 @@ export default function MiniMap({ session }: { session: WorldSession }) {
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [open, session, map])
+  }, [session, map])
 
   function walkHere(e: ReactPointerEvent<HTMLCanvasElement>) {
     const r = e.currentTarget.getBoundingClientRect()
@@ -108,21 +86,10 @@ export default function MiniMap({ session }: { session: WorldSession }) {
     if (col >= 0 && row >= 0 && col < map.cols && row < map.rows) session.requestWalk(col, row)
   }
 
-  if (!open) {
-    return (
-      <button type="button" className="minimap-toggle" onClick={() => toggle(true)} aria-label="Show the mini map" title="Show the mini map">
-        <MapIcon size={20} />
-      </button>
-    )
-  }
-
   return (
     <div className="minimap" style={{ width }}>
       {image && <img className="minimap-img" src={image} alt="" draggable={false} style={{ aspectRatio: `${map.cols} / ${map.rows}` }} />}
       <canvas ref={overlay} className="minimap-overlay" onPointerDown={walkHere} role="img" aria-label={`Mini map of ${map.title}. Click a spot to walk there.`} title="Click to walk there" />
-      <button type="button" className="minimap-close" onClick={() => toggle(false)} aria-label="Hide the mini map" title="Hide the mini map">
-        <XIcon size={14} />
-      </button>
     </div>
   )
 }

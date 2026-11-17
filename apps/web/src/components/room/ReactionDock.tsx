@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { EMOTES, REACTIONS } from '../../world/fx'
 import type { WorldSession } from '../../world/WorldSession'
-import { SparklesIcon } from '../Icons'
+import { SmileIcon } from '../Icons'
 
 type Tab = 'emotes' | 'reactions' | 'words'
 
@@ -19,6 +19,7 @@ function isTyping(e: KeyboardEvent): boolean {
 /**
  * Make your character do something: a dance or a wave, an emoji, or a word in big animated letters.
  * Everything here is a fixed list (world/fx.ts); picking one plays it on you and tells the room. Press E to open.
+ * It renders as a top-bar button (a thumb button on phones) with its panel hanging off it: below on a laptop, above on a phone.
  */
 export default function ReactionDock({ session }: { session: WorldSession }) {
   const [open, setOpen] = useState(false)
@@ -56,6 +57,10 @@ export default function ReactionDock({ session }: { session: WorldSession }) {
 
   return (
     <div className="rdock" ref={wrap}>
+      <button type="button" className={`rbtn rbtn-react ${open ? 'is-on' : ''}`} aria-expanded={open} aria-haspopup="dialog" aria-label="Emotes and reactions" title="Emotes and reactions (E)" onClick={() => setOpen((v) => !v)}>
+        <SmileIcon size={19} />
+        <span className="rbtn-label">React</span>
+      </button>
       {open && (
         <div className="rdock-panel" role="dialog" aria-label="Emotes and reactions">
           <div className="rdock-tabs" role="tablist">
@@ -96,10 +101,6 @@ export default function ReactionDock({ session }: { session: WorldSession }) {
           <p className="rdock-hint">Walking stops an emote. Everyone nearby sees these.</p>
         </div>
       )}
-
-      <button type="button" className={`rdock-btn ${open ? 'is-on' : ''}`} aria-expanded={open} aria-haspopup="dialog" aria-label="Emotes and reactions" title="Emotes and reactions (E)" onClick={() => setOpen((v) => !v)}>
-        <SparklesIcon size={22} />
-      </button>
     </div>
   )
 }

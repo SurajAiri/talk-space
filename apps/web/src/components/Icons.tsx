@@ -282,6 +282,21 @@ export const SparklesIcon = (p: P) => (
     <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" />
   </Icon>
 )
+export const SmileIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <path d="M9 9h.01M15 9h.01" strokeWidth={2.6} />
+  </Icon>
+)
+/** Three dots in a row: "more". Dots are filled so they stay crisp at 20px. */
+export const MoreIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="5" cy="12" r="1.3" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.3" fill="currentColor" />
+    <circle cx="19" cy="12" r="1.3" fill="currentColor" />
+  </Icon>
+)
 export const HeartIcon = (p: P) => (
   <Icon {...p}>
     <path d="M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6Z" />

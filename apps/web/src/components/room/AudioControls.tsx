@@ -1,5 +1,5 @@
 import { useRoomStore } from '../../store/room.store'
-import { MicIcon, MicOffIcon, VolumeIcon, VolumeOffIcon } from '../Icons'
+import { MicIcon, MicOffIcon } from '../Icons'
 
 /**
  * Microphone: green when others can hear you, red when you've muted, plain when it was never turned on
@@ -23,25 +23,6 @@ export function MicButton() {
       onClick={() => (on ? toggleMute() : void enableMic())}
     >
       {on && !muted ? <MicIcon size={20} /> : <MicOffIcon size={20} />}
-    </button>
-  )
-}
-
-/** Sound on / off for everyone in the room. Separate from the microphone: you can listen without talking, and the reverse. */
-export function SpeakerButton() {
-  const deafened = useRoomStore((s) => s.deafened)
-  const toggleDeafen = useRoomStore((s) => s.toggleDeafen)
-  const label = deafened ? 'Turn sound on' : 'Turn sound off'
-  return (
-    <button
-      type="button"
-      className={`rbtn rbtn-icon ${deafened ? 'is-muted' : ''}`}
-      aria-label={label}
-      aria-pressed={deafened}
-      title={label}
-      onClick={toggleDeafen}
-    >
-      {deafened ? <VolumeOffIcon size={20} /> : <VolumeIcon size={20} />}
     </button>
   )
 }

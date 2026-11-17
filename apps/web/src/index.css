@@ -646,6 +646,9 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   padding: calc(10px + var(--safe-t)) calc(12px + var(--safe-r)) 0 calc(12px + var(--safe-l)); pointer-events: none;
 }
 .rbar > * { pointer-events: auto; }
+/* A dropdown from the bar (room details, the three-dot menu, React) has to be above Chat / People, which open right under it at
+   z-index 41+ and climb on every click. Lifting the whole bar only while one is open keeps it a plain z-index: 20 the rest of the time. */
+.rbar:has(.rinfo, .rmenu-panel, .rdock-panel) { z-index: 100000; }
 .rbar-left { position: relative; min-width: 0; }
 .rbar-right { display: flex; gap: 8px; flex-shrink: 0; }
 .rpill, .rbtn {
@@ -669,6 +672,10 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   position: absolute; top: -5px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center;
   border-radius: 999px; background: #ff4d6d; color: #fff; font-size: 0.7rem; font-weight: 700; box-shadow: 0 0 0 2px var(--night);
 }
+.rdot {
+  position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%;
+  background: #ff4d6d; color: #fff; box-shadow: 0 0 0 2px var(--night); pointer-events: none;
+}
 .rbar-sep { align-self: center; width: 1px; height: 24px; margin: 0 2px; background: rgb(255 255 255 / 0.28); }
 .rbtn.is-live { background: #0b6b4a; border-color: rgb(52 211 155 / 0.7); color: #aef5d9; }
 .rbtn.is-live:hover { background: #0d7a54; }
@@ -678,13 +685,28 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .rbtn-leave { margin-left: 6px; } /* a little air, so it is never hit by accident */
 .rbtn-leave.is-armed { animation: armed 0.9s ease-in-out infinite; }
 @keyframes armed { 50% { box-shadow: 0 0 0 5px rgb(255 77 109 / 0.35), 0 6px 20px -8px rgb(0 0 0 / 0.6); } }
-.rinfo-fs { align-self: flex-start; }
 .rinfo {
   position: absolute; top: 52px; left: 0; width: min(340px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 12px; padding: 14px;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); user-select: text;
   animation: pop-in 0.16s ease-out;
 }
 .rinfo-desc { color: var(--text-2); }
+
+/* three-dot menu */
+.rmenu { position: relative; display: flex; }
+.rmenu-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; width: min(264px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); outline: none;
+  animation: pop-in 0.16s ease-out;
+}
+.rmenu-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--r-md);
+  background: transparent; color: var(--text); font: inherit; font-size: 0.9rem; font-weight: 600; text-align: left; cursor: pointer;
+}
+.rmenu-item svg { flex-shrink: 0; color: var(--text-2); }
+.rmenu-item:hover, .rmenu-item:focus-visible { background: var(--surface-2); }
+.rmenu-item:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.rmenu-meta { margin-left: auto; color: var(--muted); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
 .rinfo-copy { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* bottom: who hears you / mic / hints */
@@ -744,7 +766,7 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .joystick.is-active .joystick-knob { background: #fff; }
 
 /* mini map: top right, under the top bar. Floating panels (z-index 40+) just go on top of it and can be dragged away. */
-.minimap, .minimap-toggle { position: absolute; z-index: 15; right: calc(12px + var(--safe-r)); top: calc(64px + var(--safe-t)); }
+.minimap { position: absolute; z-index: 15; right: calc(12px + var(--safe-r)); top: calc(64px + var(--safe-t)); }
 .minimap {
   overflow: hidden; border: 1px solid var(--glass-line); border-radius: var(--r-md); background: var(--glass);
   box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -752,16 +774,8 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .minimap-img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
 .minimap-overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: manipulation; }
 @media (hover: hover) and (pointer: fine) { .minimap-overlay { cursor: pointer; } }
-.minimap-close, .minimap-toggle {
-  display: grid; place-items: center; border: 1px solid var(--glass-line); background: var(--glass); color: #fff; cursor: pointer;
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-}
-.minimap-close { position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; border-radius: 50%; }
-.minimap-toggle { width: 44px; height: 44px; border-radius: 50%; box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.6); }
-.minimap-close:hover, .minimap-toggle:hover { background: rgb(24 33 66 / 0.9); }
-.minimap-close:focus-visible, .minimap-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (pointer: coarse), (max-width: 720px) { .minimap { max-width: 132px; } }
-@media (max-height: 520px) { .minimap, .minimap-toggle { top: calc(54px + var(--safe-t)); } }
+@media (max-height: 520px) { .minimap { top: calc(54px + var(--safe-t)); } }
 @media (pointer: coarse) {
   /* phones held sideways get a floating panel rather than a sheet: same clearance for the badge */
   .float:not(.is-sheet) { padding-bottom: var(--host-badge); }
@@ -1079,7 +1093,7 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 @media (max-width: 720px), (max-height: 520px) {
   .rbtn { padding: 0; width: 44px; justify-content: center; }
   .rbtn-label { display: none; }
-  .rbtn-fs, .rbar-sep, .rpill-count { display: none; } /* full screen lives in the room details, and the count in the People sheet */
+  .rbar-sep, .rpill-count { display: none; } /* the count is in the three-dot menu and the People sheet */
   .rbtn-leave { margin-left: 4px; }
   .rbtn-leave.is-armed { width: auto; padding: 0 14px 0 12px; }
   .rbtn-leave.is-armed .rbtn-label { display: inline; }
@@ -1087,13 +1101,13 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   .rpill { max-width: 100%; }
   .rbar-right { gap: 6px; flex: 0 0 auto; }
 
-  /* Chat and People: big round buttons where the right thumb rests */
-  .rbtn-chat, .rbtn-people {
-    position: fixed; right: calc(14px + var(--safe-r)); width: 54px; height: 54px;
+  /* Chat and React: big round buttons where the right thumb rests (React is .rdock, placed with the emote styles below) */
+  .rbtn-chat {
+    position: fixed; right: calc(14px + var(--safe-r)); bottom: calc(82px + var(--safe-b) + var(--host-badge)); width: 54px; height: 54px;
     box-shadow: 0 10px 26px -8px rgb(0 0 0 / 0.7);
   }
-  .rbtn-people { bottom: calc(18px + var(--safe-b) + var(--host-badge)); }
-  .rbtn-chat { bottom: calc(82px + var(--safe-b) + var(--host-badge)); }
+  /* a room without a map has no React button: Chat drops into the lowest slot instead of floating above an empty one */
+  .rbar-right:not(:has(.rdock)) .rbtn-chat { bottom: calc(18px + var(--safe-b) + var(--host-badge)); }
 
   .joystick { width: 124px; height: 124px; left: calc(16px + var(--safe-l)); bottom: calc(20px + var(--safe-b)); }
   /* who-can-hear-you sits under the room name instead of competing with the thumbs */
@@ -1113,9 +1127,8 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
   .tiles { bottom: calc(18px + var(--safe-b)); width: min(400px, calc(100vw - 300px)); }
   .movehint { bottom: calc(20px + var(--safe-b)); }
   .room-screen { --host-badge: 56px; } /* smaller buttons, so one button + gap is 56px here */
-  .rbtn-chat, .rbtn-people { width: 48px; height: 48px; right: calc(12px + var(--safe-r)); }
-  .rbtn-people { bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
-  .rbtn-chat { bottom: calc(68px + var(--safe-b) + var(--host-badge)); }
+  .rbtn.rbtn-chat { width: 48px; height: 48px; right: calc(12px + var(--safe-r)); bottom: calc(68px + var(--safe-b) + var(--host-badge)); }
+  .rbar-right:not(:has(.rdock)) .rbtn.rbtn-chat { bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
   .joystick { width: 112px; height: 112px; }
 }
 @media (max-height: 520px) {
@@ -1220,16 +1233,11 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .pchar-text p { margin: 0; color: var(--text-2); font-size: 0.9rem; }
 
 /* ---- emotes and reactions (room) ---- */
-.rdock { position: absolute; z-index: 19; left: 50%; bottom: calc(22px + var(--safe-b)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
-.rdock-btn {
-  display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid var(--glass-line); border-radius: 50%; background: var(--glass); color: #fff; cursor: pointer;
-  box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-}
-.rdock-btn:hover { background: rgb(24 33 66 / 0.9); }
-.rdock-btn.is-on { background: var(--brand); border-color: transparent; }
-.rdock-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* The button is an ordinary bar button (.rbtn). The panel hangs under it on a laptop; on phones the button joins Chat in the
+   thumb stack (People's old slot) and the panel opens upward. Declared after the bar's media queries so these win. */
+.rdock { position: relative; display: flex; }
 .rdock-panel {
-  position: absolute; bottom: 62px; width: min(432px, calc(100vw - 24px)); padding: 10px; border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  position: absolute; top: calc(100% + 8px); right: 0; width: min(432px, calc(100vw - 24px)); padding: 10px; border: 1px solid var(--border-strong); border-radius: var(--r-lg);
   background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); animation: pop-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.1);
 }
 .rdock-tabs { display: flex; gap: 4px; padding: 3px; margin-bottom: 8px; border-radius: 999px; background: var(--surface-2); }
@@ -1244,4 +1252,14 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .rdock-word { background: #26304d; border-color: #26304d; font-size: 1rem; font-weight: 900; letter-spacing: 0.02em; }
 .rdock-word:hover { background: #313e63; }
 .rdock-rainbow { background: linear-gradient(90deg, #f87171, #facc15, #4ade80, #60a5fa, #c084fc); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@media (max-width: 720px), (max-height: 520px) {
+  .rdock { position: fixed; right: calc(14px + var(--safe-r)); bottom: calc(18px + var(--safe-b) + var(--host-badge)); }
+  .rdock .rbtn { width: 54px; height: 54px; box-shadow: 0 10px 26px -8px rgb(0 0 0 / 0.7); }
+  .rdock-panel { top: auto; bottom: calc(100% + 10px); }
+}
+@media (max-height: 520px) {
+  .rdock { right: calc(12px + var(--safe-r)); bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
+  .rdock .rbtn { width: 48px; height: 48px; }
+  .rdock-grid { max-height: min(264px, 30dvh); } /* the panel opens upward: on a short screen it must not run into the bar */
+}
 .rdock-hint { margin: 8px 2px 0; font-size: 0.72rem; color: var(--text-3, var(--text-2)); text-align: center; }
