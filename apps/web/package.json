@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "maps": "node tools/maps.ts",
     "og": "node tools/og-image.ts",
+    "props": "node tools/props-sheet.ts",
     "test": "node --disable-warning=ExperimentalWarning --test \"scripts/*.test.ts\"",
     "preview": "vite preview"
   },

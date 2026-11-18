@@ -9,7 +9,10 @@
  * Pure data + canvas calls, no DOM or app imports, so the whole `assets/` folder can be
  * copied into another project (together with `../types.ts`).
  */
-import { TILE, type Dir, type Prop } from '../types.ts'
+import { TILE, type Prop } from '../types.ts'
+import { drawArcade, drawBookshelf, drawCafeCounter, drawCampfire, drawDeskPod, drawFountain, drawLanternPost as drawLantern, drawParasol, drawPicnicTable, drawPingpong, drawPlant, drawRoundTable, drawSofa, drawSofaFront } from './furniture.ts'
+import { hexA, noise, shadow, TAU, tri } from './paint.ts'
+import { drawSeat, drawSeatFront, SEAT_DEPTH } from './seats.ts'
 
 export type PropResize = 'none' | 'w' | 'wh'
 
@@ -39,6 +42,18 @@ export interface PropDef {
   light?: (p: Prop, time: number, emit: EmitLight) => void
   /** Drawn ABOVE people, after the depth-sorted pass: string lights, canopies. Things you walk underneath. */
   overhead?: (g: CanvasRenderingContext2D, p: Prop, time: number) => void
+  /**
+   * A SECOND pass, painted after anyone standing in or on the prop: a sofa's arms, a seat's armrests, the lip of a
+   * tub. With `draw` it lets a person sit BETWEEN the two halves of one object instead of being hidden behind it.
+   */
+  front?: (g: CanvasRenderingContext2D, p: Prop, time: number) => void
+  /** buildWorldMap sets `Prop.facing` from the seats on top of it (a sofa faces where its cushions look). */
+  faces?: boolean
+  /**
+   * Where each pass sorts against people, in px relative to the prop's BOTTOM edge (default: draw at 0, front at +1).
+   * A seated person sorts at (their tile's bottom edge - 12), so a pass at -16 is behind them and one at -8 in front.
+   */
+  depth?: { base: number; front: number }
 }
 
 /** A soft pool of coloured light in world pixels. `rgb` is "r, g, b"; `a` is its strength, 0..1. */
@@ -50,31 +65,6 @@ export interface Light {
   a: number
 }
 export type EmitLight = (l: Light) => void
-
-function drawFountain(g: CanvasRenderingContext2D, p: Prop, time: number) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  const cx = x + TILE;
-  const cy = y + TILE;
-  g.fillStyle = '#64748b';
-  g.beginPath();
-  g.arc(cx, cy, 42, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#38bdf8';
-  g.beginPath();
-  g.arc(cx, cy, 34, 0, Math.PI * 2);
-  g.fill();
-  const r1 = 12 + ((time * 0.02) % 20);
-  g.strokeStyle = 'rgba(255,255,255,0.65)';
-  g.lineWidth = 2;
-  g.beginPath();
-  g.arc(cx, cy, r1, 0, Math.PI * 2);
-  g.stroke();
-  g.fillStyle = '#e2e8f0';
-  g.beginPath();
-  g.arc(cx, cy, 10, 0, Math.PI * 2);
-  g.fill();
-}
 
 function drawTree(g: CanvasRenderingContext2D, p: Prop, time: number) {
   const x = p.col * TILE
@@ -101,297 +91,12 @@ function drawTree(g: CanvasRenderingContext2D, p: Prop, time: number) {
   g.fill();
 }
 
-function drawCampfire(g: CanvasRenderingContext2D, p: Prop, time: number) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  g.fillStyle = '#451a03';
-  g.fillRect(cx - 16, cy - 4, 32, 8);
-  g.fillRect(cx - 4, cy - 16, 8, 32);
-  g.strokeStyle = '#94a3b8';
-  g.lineWidth = 4;
-  g.beginPath();
-  g.arc(cx, cy, 18, 0, Math.PI * 2);
-  g.stroke();
-  const flicker = Math.sin(time * 0.02) * 3;
-  g.fillStyle = '#f97316';
-  g.beginPath();
-  g.arc(cx, cy - 2, 12 + flicker * 0.3, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#fde047';
-  g.beginPath();
-  g.arc(cx, cy - 4, 7 - flicker * 0.2, 0, Math.PI * 2);
-  g.fill();
-}
-
-function drawLantern(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  g.fillStyle = '#334155';
-  g.fillRect(cx - 3, cy - 18, 6, 30);
-  g.fillStyle = '#fef08a';
-  g.beginPath();
-  g.arc(cx, cy - 20, 8, 0, Math.PI * 2);
-  g.fill();
-}
-
-function drawCafeCounter(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = '#78350f';
-  g.beginPath();
-  g.roundRect(x + 2, y + 6, p.w * TILE - 4, TILE - 8, 6);
-  g.fill();
-  g.fillStyle = '#f8fafc';
-  g.fillRect(x + 6, y + 8, p.w * TILE - 12, 14);
-  g.fillStyle = '#dc2626';
-  g.fillRect(x + 18, y + 4, 24, 18);
-  g.fillStyle = '#f59e0b';
-  g.beginPath();
-  g.arc(x + 90, y + 16, 6, 0, Math.PI * 2);
-  g.arc(x + 106, y + 16, 6, 0, Math.PI * 2);
-  g.fill();
-}
-
-function drawBookshelf(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = '#94a3b8';
-  g.fillRect(x + 2, y + 2, p.w * TILE - 4, TILE - 6);
-  const bookColors = ['#ef4444', '#3b82f6', '#10b981', '#eab308', '#a855f7'];
-  for (let b = 8; b < p.w * TILE - 12; b += 10) {
-    g.fillStyle = bookColors[(b / 10) % bookColors.length];
-    g.fillRect(x + b, y + 10, 7, 14);
-    g.fillRect(x + b, y + 28, 7, 12);
-  }
-}
-
-function drawSofaHoriz(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = p.color || '#f59e0b';
-  g.beginPath();
-  g.roundRect(x + 2, y + 4, p.w * TILE - 4, TILE - 8, 8);
-  g.fill();
-  g.fillStyle = 'rgba(0,0,0,0.15)';
-  g.fillRect(x + 4, y + 4, p.w * TILE - 8, 10);
-}
-
-function drawRoundTable(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  g.fillStyle = p.type === 'round_table' ? '#e2b887' : '#334155';
-  g.beginPath();
-  g.ellipse(cx, cy, 22, 16, 0, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = 'rgba(0,0,0,0.25)';
-  g.lineWidth = 2;
-  g.stroke();
-}
-
-function drawPingpong(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = '#10b981';
-  g.fillRect(x + 6, y + 6, p.w * TILE - 12, p.h * TILE - 12);
-  g.strokeStyle = '#ffffff';
-  g.lineWidth = 2;
-  g.strokeRect(x + 8, y + 8, p.w * TILE - 16, p.h * TILE - 16);
-  g.beginPath();
-  g.moveTo(x + p.w * TILE / 2, y + 8);
-  g.lineTo(x + p.w * TILE / 2, y + p.h * TILE - 8);
-  g.stroke();
-  g.fillStyle = 'rgba(255,255,255,0.75)';
-  g.fillRect(x + 4, y + (p.h * TILE) / 2 - 2, p.w * TILE - 8, 4);
-}
-
-function drawArcade(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = '#1e293b';
-  g.fillRect(x + 8, y + 4, TILE - 16, TILE - 8);
-  g.fillStyle = p.color || '#06b6d4';
-  g.fillRect(x + 12, y + 10, TILE - 24, 16);
-}
-
-function drawDeskPod(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = '#f8fafc';
-  g.beginPath();
-  g.roundRect(x + 2, y + 10, p.w * TILE - 4, TILE - 14, 4);
-  g.fill();
-  g.fillStyle = '#1e293b';
-  g.fillRect(x + 12, y + 14, 24, 14);
-  g.fillRect(x + 56, y + 14, 24, 14);
-  g.fillStyle = '#38bdf8';
-  g.fillRect(x + 14, y + 16, 20, 10);
-  g.fillRect(x + 58, y + 16, 20, 10);
-}
-
-function drawPicnicTable(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  g.fillStyle = '#b45309';
-  g.beginPath();
-  g.roundRect(x + 4, y + 8, p.w * TILE - 8, TILE - 16, 4);
-  g.fill();
-}
-
-function drawPlant(g: CanvasRenderingContext2D, p: Prop) {
-  const x = p.col * TILE
-  const y = p.row * TILE
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  g.fillStyle = '#475569';
-  g.beginPath();
-  g.arc(cx, cy + 8, 11, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#22c55e';
-  g.beginPath();
-  g.arc(cx, cy - 2, 13, 0, Math.PI * 2);
-  g.arc(cx - 8, cy + 2, 9, 0, Math.PI * 2);
-  g.arc(cx + 8, cy + 2, 9, 0, Math.PI * 2);
-  g.fill();
-}
-
-/** Rotation that turns a "faces down" drawing to face each direction. */
-const SEAT_ANGLE: Record<Dir, number> = { down: 0, left: Math.PI / 2, up: Math.PI, right: -Math.PI / 2 }
-
-function drawSeat(g: CanvasRenderingContext2D, p: Prop) {
-  const s = p.seat
-  if (!s) return
-  const x = p.col * TILE
-  const y = p.row * TILE
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  if (s.style === 'beanbag') {
-    g.fillStyle = s.color;
-    g.beginPath();
-    g.arc(cx, cy + 2, 15, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.22)';
-    g.beginPath();
-    g.arc(cx - 4, cy - 2, 6, 0, Math.PI * 2);
-    g.fill();
-  } else if (s.style === 'bench' || s.style === 'log_seat') {
-    g.fillStyle = s.color;
-    g.beginPath();
-    g.roundRect(x + 8, y + 12, TILE - 16, TILE - 24, 6);
-    g.fill();
-  } else if (s.style === 'stool' || s.style === 'office_chair') {
-    g.fillStyle = s.color;
-    g.beginPath();
-    g.arc(cx, cy + 4, 11, 0, Math.PI * 2);
-    g.fill();
-  } else if (s.style === 'armchair') {
-    // faces s.dir, so the back is on the opposite side (rotate a "facing down" drawing)
-    g.save()
-    g.translate(cx, cy)
-    g.rotate(SEAT_ANGLE[s.dir])
-    g.fillStyle = 'rgba(15, 23, 42, 0.25)'
-    g.beginPath()
-    g.ellipse(0, 17, 17, 5, 0, 0, Math.PI * 2)
-    g.fill()
-    g.fillStyle = s.color
-    g.beginPath()
-    g.roundRect(-16, -17, 32, 33, 7)
-    g.fill()
-    g.fillStyle = 'rgba(0, 0, 0, 0.28)'
-    g.beginPath()
-    g.roundRect(-16, -17, 32, 11, 6)
-    g.fill()
-    g.beginPath()
-    g.roundRect(-18, -8, 7, 24, 4)
-    g.roundRect(11, -8, 7, 24, 4)
-    g.fill()
-    g.fillStyle = 'rgba(255, 255, 255, 0.2)'
-    g.beginPath()
-    g.roundRect(-9, -3, 18, 15, 5)
-    g.fill()
-    g.restore()
-  } else if (s.style === 'deck_chair') {
-    g.save()
-    g.translate(cx, cy)
-    g.rotate(SEAT_ANGLE[s.dir])
-    g.fillStyle = 'rgba(15, 23, 42, 0.22)'
-    g.beginPath()
-    g.ellipse(2, 21, 14, 4, 0, 0, Math.PI * 2)
-    g.fill()
-    g.fillStyle = '#e2e8f0'
-    g.beginPath()
-    g.roundRect(-11, -21, 22, 42, 4)
-    g.fill()
-    g.fillStyle = s.color
-    for (let sy = -19; sy < 19; sy += 10) g.fillRect(-11, sy, 22, 5)
-    g.fillStyle = '#92400e'
-    g.fillRect(-13, -22, 3, 44)
-    g.fillRect(10, -22, 3, 44)
-    g.fillStyle = '#f8fafc'
-    g.beginPath()
-    g.roundRect(-8, -20, 16, 8, 3)
-    g.fill()
-    g.restore()
-  } else if (s.style === 'zabuton') {
-    g.fillStyle = 'rgba(15, 23, 42, 0.22)'
-    g.beginPath()
-    g.ellipse(cx, cy + 15, 15, 4, 0, 0, Math.PI * 2)
-    g.fill()
-    g.fillStyle = s.color
-    g.beginPath()
-    g.roundRect(cx - 15, cy - 14, 30, 29, 6)
-    g.fill()
-    g.strokeStyle = 'rgba(255, 255, 255, 0.35)'
-    g.lineWidth = 1.5
-    g.beginPath()
-    g.roundRect(cx - 12, cy - 11, 24, 23, 4)
-    g.stroke()
-    g.fillStyle = 'rgba(0, 0, 0, 0.25)'
-    g.beginPath()
-    g.arc(cx, cy, 3, 0, Math.PI * 2)
-    g.fill()
-  }
-}
-
 // =============================================================================================
 // EXTENDED PACK (Lodge / Zen Garden / Orbital maps)
 // Same rules as above. Reminder: props are depth-sorted by their BOTTOM edge, which is why
 // nothing here is a flat floor decal (it would paint over people standing on its last row);
 // flat things (rugs, bridges) are tiles instead. Tall props may draw above their footprint.
 // =============================================================================================
-
-/** Deterministic noise in [0, 1) from a cell position (same helper as tiles.ts, kept local on purpose). */
-function noise(c: number, r: number, k = 0): number {
-  let h = Math.imul(c + 1013, 374761393) ^ Math.imul(r + 7919, 668265263) ^ Math.imul(k + 17, 1274126177)
-  h = Math.imul(h ^ (h >>> 13), 1103515245)
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
-}
-
-function shadow(g: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, a = 0.28) {
-  g.fillStyle = `rgba(15, 23, 42, ${a})`
-  g.beginPath()
-  g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-  g.fill()
-}
-
-function hexA(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
-}
-
-function tri(g: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, cx: number, cy: number) {
-  g.beginPath()
-  g.moveTo(ax, ay)
-  g.lineTo(bx, by)
-  g.lineTo(cx, cy)
-  g.closePath()
-  g.fill()
-}
 
 // ---- bake cache (same idea as tiles.ts) -------------------------------------------------------
 // Props that are static and drawn many times per room (planter racks, bookcases) are painted once per
@@ -1236,7 +941,6 @@ function drawSolarPanel(g: CanvasRenderingContext2D, p: Prop, time: number) {
 // people (`overhead`). Static structure is baked once per prop, only steam, flames and sway are live.
 // =============================================================================================
 
-const TAU = Math.PI * 2
 const WARM = '255, 176, 92'
 
 /** A small bulb: a faint halo, the coloured glass and a white-hot core. */
@@ -2263,14 +1967,14 @@ export const PROP_CATALOG: readonly PropDef[] = [
   { type: 'fountain', label: 'Fountain', w: 2, h: 2, solid: true, resize: 'none', draw: drawFountain },
   { type: 'cafe_counter', label: 'Café counter', w: 3, h: 1, solid: true, resize: 'w', minW: 3, draw: drawCafeCounter },
   { type: 'bookshelf', label: 'Bookshelf', w: 2, h: 1, solid: true, resize: 'w', minW: 1, draw: drawBookshelf },
-  { type: 'sofa_horiz', label: 'Sofa (walk-through)', w: 3, h: 1, solid: false, resize: 'w', minW: 2, color: '#f59e0b', draw: drawSofaHoriz },
+  { type: 'sofa_horiz', label: 'Sofa (walk-through)', w: 3, h: 1, solid: false, resize: 'w', minW: 2, color: '#f59e0b', faces: true, depth: { base: -18, front: -6 }, draw: drawSofa, front: drawSofaFront },
   { type: 'round_table', label: 'Round table', w: 1, h: 1, solid: true, resize: 'none', draw: drawRoundTable },
   { type: 'media_table', label: 'Media table', w: 1, h: 1, solid: true, resize: 'none', draw: drawRoundTable },
   { type: 'pingpong', label: 'Ping-pong table', w: 2, h: 3, solid: true, resize: 'wh', minW: 1, minH: 1, draw: drawPingpong },
   { type: 'arcade', label: 'Arcade cabinet', w: 1, h: 1, solid: true, resize: 'none', color: '#06b6d4', draw: drawArcade },
   { type: 'desk_pod', label: 'Desk pod', w: 2, h: 1, solid: true, resize: 'w', minW: 1, draw: drawDeskPod },
   { type: 'picnic_table', label: 'Picnic table', w: 2, h: 1, solid: true, resize: 'w', minW: 1, draw: drawPicnicTable },
-  { type: 'seat', label: 'Seat', w: 1, h: 1, solid: false, resize: 'none', hidden: true, draw: drawSeat },
+  { type: 'seat', label: 'Seat', w: 1, h: 1, solid: false, resize: 'none', hidden: true, depth: SEAT_DEPTH, draw: drawSeat, front: drawSeatFront },
   // ---- extended pack: Lodge / Zen Garden / Orbital (appended; existing types never change) ----
   { type: 'pine', label: 'Pine tree', w: 1, h: 1, solid: true, resize: 'none', variants: ['green', 'dark'], draw: drawPine },
   { type: 'maple', label: 'Maple tree', w: 1, h: 1, solid: true, resize: 'none', variants: ['red', 'gold', 'green'], draw: drawMaple },
@@ -2281,6 +1985,7 @@ export const PROP_CATALOG: readonly PropDef[] = [
   { type: 'bamboo', label: 'Bamboo clump', w: 1, h: 1, solid: true, resize: 'w', minW: 1, draw: drawBamboo },
   { type: 'torii', label: 'Torii gate (stand it on solid tiles)', w: 4, h: 1, solid: false, resize: 'w', minW: 3, color: '#d6361f', draw: drawTorii },
   { type: 'shrine', label: 'Shrine', w: 3, h: 2, solid: true, resize: 'none', draw: drawShrine },
+  { type: 'parasol', label: 'Beach parasol', w: 1, h: 1, solid: true, resize: 'none', color: '#ef4444', draw: drawParasol },
   { type: 'tent', label: 'Tent', w: 2, h: 2, solid: true, resize: 'none', color: '#f97316', draw: drawTent },
   { type: 'rowboat', label: 'Rowboat', w: 2, h: 1, solid: true, resize: 'none', color: '#b45309', draw: drawRowboat },
   { type: 'hot_tub', label: 'Hot tub / hot spring', w: 2, h: 2, solid: true, resize: 'wh', minW: 2, minH: 2, variants: ['wood', 'stone'], draw: drawHotTub },
@@ -2314,9 +2019,20 @@ export function drawProp(g: CanvasRenderingContext2D, p: Prop, time: number) {
   BY_TYPE.get(p.type)?.draw(g, p, time)
 }
 
+/** Seat styles and what each one does live in seats.ts; re-exported here because the file format and tools read them from the catalog. */
+export { SEAT_STYLES, SEAT_KINDS, seatKind, type SeatStyle, type SeatKind, type Posture } from './seats.ts'
+
 /**
- * Seats are walk-on spots (you sit when you stop on one). `sofa_cushion` draws nothing
- * on purpose: it is meant to sit on top of a `sofa_horiz`, which already draws the cushion.
+ * Where a prop's two passes sort against people (world y in px). Every renderer (the room, the editor, thumbnails, the
+ * landing page) uses this so a sofa or a bench looks the same everywhere.
  */
-export const SEAT_STYLES = ['bench', 'stool', 'sofa_cushion', 'beanbag', 'office_chair', 'log_seat', 'armchair', 'deck_chair', 'zabuton'] as const
-export type SeatStyle = (typeof SEAT_STYLES)[number]
+export function propDepth(p: Prop): { base: number; front: number } {
+  const bottom = (p.row + p.h) * TILE
+  const d = BY_TYPE.get(p.type)?.depth
+  return d ? { base: bottom + d.base, front: bottom + d.front } : { base: bottom, front: bottom + 1 }
+}
+
+/** Draw the second pass of a prop (armrests, backrests...), if it has one. */
+export function drawPropFront(g: CanvasRenderingContext2D, p: Prop, time: number) {
+  BY_TYPE.get(p.type)?.front?.(g, p, time)
+}

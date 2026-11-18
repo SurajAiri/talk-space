@@ -3,8 +3,10 @@ import { emoteById, reactionById, REACTION_MS } from './fx.ts'
 import { clampZoom, fitZoom, wheelZoomFactor, zoomLimits, type ZoomLimits } from './camera.ts'
 import { HEARING, hearingGain, zoneAt } from './hearing.ts'
 import { findPath, isTileBlocked, type Waypoint } from './navigation.ts'
+import { seatKind } from './assets/seats.ts'
+import { exitTile, nearestSeat, promptFor, seatAnchor, seatedOn, seatIndex, seatInTile, type Prompt, type SeatIndex } from './interact.ts'
 import { drawCharacter, drawCharacterOverlays } from './render/character.ts'
-import { drawNight, drawPropItem, drawWorldTiles, nightPropsOf } from './render/scene.ts'
+import { drawDepthSorted, drawNight, drawWorldTiles, nightPropsOf, propDepthItems, type DepthItem } from './render/scene.ts'
 import { TILE, type Character, type Prop, type Seat } from './types.ts'
 import type { WorldSession } from './WorldSession.ts'
 
@@ -57,13 +59,25 @@ export class WorldEngine {
   private readonly ctx: CanvasRenderingContext2D
   private readonly session: WorldSession
   private readonly opts: EngineOptions
-  private readonly seats = new Map<string, Seat>()
+  private readonly seats: SeatIndex
+  private readonly statics: DepthItem[] // every prop's paint passes, sorted back to front (props never move)
   private readonly player: Character
   private readonly remote = new Map<string, Character>()
   private readonly keys = new Set<string>()
   private readonly cleanup: (() => void)[] = []
 
   private path: Waypoint[] = []
+  /** the seat I am walking to / was asked to sit on: it seats me on arrival even if it is a beach bed that never seats you by itself */
+  private intent: Seat | null = null
+  /** the seat I just stood up from: do not pull me back onto it until I have left its tile */
+  private dismissed: Seat | null = null
+  /** what the on-screen action offers right now ("Sit", "Lie down", "Stand up"), and when it appeared (ms), for its fade-in */
+  private prompt: { prompt: Prompt; since: number; rect: { x: number; y: number; w: number; h: number } | null } | null = null
+  private hoverSeat: Seat | null = null
+  /** the timestamp of the frame being drawn: the button's fade-in runs on the frame clock, not the wall clock */
+  private clock = 0
+  private hoverPrompt = false
+  private readonly coarse: boolean // a phone or tablet: no keyboard hint on the button
   private marker: { x: number; y: number; age: number } | null = null
   private camera: { x: number; y: number }
   private view = { x: 0, y: 0 } // clamped camera centre of the last frame (for click -> world mapping)
@@ -90,8 +104,10 @@ export class WorldEngine {
     if (!ctx) throw new Error('Canvas 2D is not available')
     this.ctx = ctx
 
-    for (const s of opts.session.map.seats) this.seats.set(`${s.col},${s.row}`, s)
+    this.seats = seatIndex(opts.session.map.seats)
+    this.statics = propDepthItems(opts.session.map.props)
     this.night = nightPropsOf(opts.session.map.props)
+    this.coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
 
     const l = opts.session.local
     this.player = {
@@ -123,6 +139,7 @@ export class WorldEngine {
     this.listen(this.canvas, 'pointermove', this.onPointerMove as EventListener)
     this.listen(this.canvas, 'pointerup', this.onPointerUp as EventListener)
     this.listen(this.canvas, 'pointercancel', this.onPointerCancel as EventListener)
+    this.listen(this.canvas, 'pointerleave', this.onPointerLeave as EventListener)
     this.listen(this.canvas, 'wheel', this.onWheel as EventListener, { passive: false })
 
     const ro = new ResizeObserver(() => this.resize())
@@ -150,6 +167,13 @@ export class WorldEngine {
   private readonly onKeyDown = (e: KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e)) return
     const k = e.key.toLowerCase()
+    if (k === 'e') {
+      // sit / lie down / stand up
+      e.preventDefault()
+      if (!e.repeat) this.interact()
+      this.session.mixer.resume()
+      return
+    }
     if (!MOVE_KEYS.has(k)) return
     e.preventDefault() // arrows must not scroll the page
     this.keys.add(k)
@@ -170,7 +194,7 @@ export class WorldEngine {
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (e.pointerType === 'mouse') {
       // a click is a click the moment it lands
-      if (e.button === 0) this.moveToward(e.clientX, e.clientY)
+      if (e.button === 0 && !this.pressPrompt(e.clientX, e.clientY)) this.moveToward(e.clientX, e.clientY)
       return
     }
     if (this.pointers.size === 1) {
@@ -183,6 +207,7 @@ export class WorldEngine {
   }
 
   private readonly onPointerMove = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') this.updateHover(e.clientX, e.clientY)
     const p = this.pointers.get(e.pointerId)
     if (!p) return
     p.x = e.clientX
@@ -203,7 +228,7 @@ export class WorldEngine {
     const tap = this.tap
     this.pointers.delete(e.pointerId)
     if (this.pointers.size < 2) this.pinch = null
-    if (tap && tap.id === e.pointerId && performance.now() - tap.t < TAP_MAX_MS) this.moveToward(tap.x, tap.y)
+    if (tap && tap.id === e.pointerId && performance.now() - tap.t < TAP_MAX_MS && !this.pressPrompt(tap.x, tap.y)) this.moveToward(tap.x, tap.y)
     if (tap && tap.id === e.pointerId) this.tap = null
   }
 
@@ -218,19 +243,97 @@ export class WorldEngine {
     return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0
   }
 
-  /** Walk to the tile under a screen point (if there is a way there). */
-  private moveToward(clientX: number, clientY: number) {
+  private readonly onPointerLeave = () => {
+    this.hoverSeat = null
+    this.hoverPrompt = false
+    this.canvas.style.cursor = ''
+  }
+
+  /** A screen point in world pixels. */
+  private toWorld(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect()
-    const wx = (clientX - rect.left - this.cssW / 2) / this.zoom + this.view.x
-    const wy = (clientY - rect.top - this.cssH / 2) / this.zoom + this.view.y
-    this.walkToTile(Math.floor(wx / TILE), Math.floor(wy / TILE))
+    return { x: (clientX - rect.left - this.cssW / 2) / this.zoom + this.view.x, y: (clientY - rect.top - this.cssH / 2) / this.zoom + this.view.y }
+  }
+
+  /** Walk to the tile under a screen point (if there is a way there). Clicking a seat means "sit there". */
+  private moveToward(clientX: number, clientY: number) {
+    const w = this.toWorld(clientX, clientY)
+    this.walkToTile(Math.floor(w.x / TILE), Math.floor(w.y / TILE))
+  }
+
+  /** True (and acts) if the press landed on the on-screen Sit / Stand up button. */
+  private pressPrompt(clientX: number, clientY: number): boolean {
+    const r = this.prompt?.rect
+    if (!r) return false
+    const w = this.toWorld(clientX, clientY)
+    if (w.x < r.x || w.x > r.x + r.w || w.y < r.y || w.y > r.y + r.h) return false
+    this.interact()
+    return true
+  }
+
+  /** Mouse only: light up the seat under the pointer, and show a hand over seats and the button. */
+  private updateHover(clientX: number, clientY: number) {
+    const w = this.toWorld(clientX, clientY)
+    const r = this.prompt?.rect
+    this.hoverPrompt = Boolean(r && w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h)
+    const seat = seatInTile(this.seats, w.x, w.y)
+    this.hoverSeat = seat && !this.isTaken(seat) && seat !== this.player.sittingSeat ? seat : null
+    this.canvas.style.cursor = this.hoverPrompt || this.hoverSeat ? 'pointer' : ''
+  }
+
+  // ---------- sitting, lying down, standing up ----------
+
+  /** Is somebody else on this seat? */
+  private isTaken(seat: Seat): boolean {
+    for (const c of this.remote.values()) if (c.sittingSeat?.id === seat.id) return true
+    return false
+  }
+
+  /** The action button / E key: stand up if I am seated, otherwise sit (or lie) on the seat the button offers. */
+  interact() {
+    const p = this.player
+    if (p.sittingSeat) return this.standUp(p.sittingSeat)
+    const near = this.prompt?.prompt.kind === 'sit' ? this.prompt.prompt.seat : null
+    if (near) this.sitOn(near)
+  }
+
+  /** Walk onto a seat's anchor (a few px if I am already beside it) and settle into it. */
+  private sitOn(seat: Seat) {
+    if (this.isTaken(seat)) return
+    const p = this.player
+    const a = seatAnchor(seat)
+    const path = findPath(this.session.map, { col: Math.floor(p.x / TILE), row: Math.floor(p.y / TILE) }, { col: seat.col, row: seat.row })
+    if (!path) return
+    this.intent = seat
+    this.dismissed = null
+    this.path = path.length ? path : [{ x: a.x, y: a.y }]
+    this.marker = { x: a.x, y: a.y, age: 0 }
+  }
+
+  /** Get up: step out in front of the seat. (Stepping off by keys or by a click just walks away, which also stands you up.) */
+  private standUp(seat: Seat) {
+    this.dismissed = seat
+    this.intent = null
+    const t = exitTile(this.session.map, this.seats, seat)
+    if (t) this.path = [{ x: (t.col + 0.5) * TILE, y: (t.row + 0.5) * TILE }]
   }
 
   /** Walk to a tile (if there is a way there). Shared by taps on the map and clicks on the minimap. */
   private walkToTile(col: number, row: number) {
+    let seat = this.seats.get(`${col},${row}`) ?? null
+    if (seat && this.isTaken(seat)) {
+      // somebody is already sitting there: walk up to it, not into them
+      const t = exitTile(this.session.map, this.seats, seat)
+      if (!t) return
+      col = t.col
+      row = t.row
+      seat = null
+    }
     const path = findPath(this.session.map, { col: Math.floor(this.player.x / TILE), row: Math.floor(this.player.y / TILE) }, { col, row })
     if (!path) return // wall, water or unreachable: ignore it
-    this.path = path
+    this.intent = seat // you clicked a free seat: you meant to sit
+    this.dismissed = null
+    this.path = path.length || !seat ? path : [seatAnchor(seat)]
     this.marker = { x: (col + 0.5) * TILE, y: (row + 0.5) * TILE, age: 0 }
   }
 
@@ -270,10 +373,6 @@ export class WorldEngine {
     this.raf = requestAnimationFrame(this.frame)
   }
 
-  private seatAt(x: number, y: number): Seat | null {
-    return this.seats.get(`${Math.floor(x / TILE)},${Math.floor(y / TILE)}`) ?? null
-  }
-
   private update(dt: number) {
     const map = this.session.map
     const p = this.player
@@ -297,12 +396,14 @@ export class WorldEngine {
     const stickMag = Math.hypot(stick.x, stick.y)
     if (dx !== 0 || dy !== 0) {
       this.path = []
+      this.intent = null
       const len = Math.hypot(dx, dy)
       dx /= len
       dy /= len
     } else if (stickMag > STICK_DEADZONE) {
       // analog: a light push walks slowly, a full push at full speed
       this.path = []
+      this.intent = null
       dx = stick.x / stickMag
       dy = stick.y / stickMag
       speedScale = Math.min(1, (stickMag - STICK_DEADZONE) / (1 - STICK_DEADZONE) * 1.15)
@@ -339,10 +440,26 @@ export class WorldEngine {
     if (followingPath && !p.moving) this.path = [] // walked into something the path did not expect
     if (p.moving) p.walkFrame += dt * 60
 
-    // --- sitting: standing still on a seat tile ---
-    const seat = p.moving ? null : this.seatAt(p.x, p.y)
-    p.sittingSeat = seat
-    if (seat) p.dir = seat.dir
+    // --- seats ---
+    // Sitting is derived from where I am (interact.ts), the same rule every other screen applies to me. What happens
+    // here is only the walking: leaving a seat, and gliding onto one.
+    const wasSeated = p.sittingSeat
+    const idle = dx === 0 && dy === 0
+    if (wasSeated && !idle) {
+      this.dismissed = wasSeated // I chose to get up: do not pull me back while I am still on its tile
+      this.intent = null
+    }
+    const here = seatInTile(this.seats, p.x, p.y)
+    if (this.dismissed && here !== this.dismissed) this.dismissed = null
+    if (idle && !p.moving && this.path.length === 0 && here && here !== this.dismissed) {
+      // standing still on a seat's tile but not on its middle: settle onto it, if it is the kind that seats you (or I asked)
+      const a = seatAnchor(here)
+      if (Math.hypot(p.x - a.x, p.y - a.y) > 0.5 && (seatKind(here.style).auto || this.intent === here) && !this.isTaken(here)) this.path = [a]
+    }
+    p.sittingSeat = seatedOn(this.seats, p.x, p.y, p.moving)
+    if (this.intent && p.sittingSeat === this.intent) this.intent = null // arrived
+    if (p.sittingSeat) p.dir = p.sittingSeat.dir
+    p.sitT = p.sittingSeat ? Math.min(1, (p.sitT ?? 0) + dt * 4.2) : 0
 
     // --- publish our position (tile units) for the network + hearing logic ---
     const l = this.session.local
@@ -352,6 +469,7 @@ export class WorldEngine {
     l.moving = p.moving
 
     this.updateRemotes(dt)
+    this.updateSeatState()
     this.applyBubbles(performance.now())
     this.applyFx(performance.now())
 
@@ -362,6 +480,28 @@ export class WorldEngine {
     this.camera.x += (p.x - this.camera.x) * cam
     this.camera.y += (p.y - this.camera.y) * cam
     if (this.marker && (this.marker.age += dt) > 0.8) this.marker = null
+  }
+
+  /** Mark taken seats (beanbags squash) and work out what the Sit / Stand up button says right now. */
+  private updateSeatState() {
+    const p = this.player
+    const map = this.session.map
+    for (const s of map.seats) s.taken = false
+    if (p.sittingSeat) p.sittingSeat.taken = true
+    for (const c of this.remote.values()) if (c.sittingSeat) c.sittingSeat.taken = true
+
+    // the button shows when I am settled (Stand up) or standing still near a free seat (Sit / Lie down)
+    const settled = !p.moving && this.path.length === 0
+    const near = settled && !p.sittingSeat ? nearestSeat(map.seats, p.x, p.y, (s) => !this.isTaken(s)) : null
+    const next = settled ? promptFor(p.sittingSeat, near) : null
+    if (!next) {
+      this.prompt = null
+    } else if (!this.prompt || this.prompt.prompt.kind !== next.kind || this.prompt.prompt.seat !== next.seat) {
+      this.prompt = { prompt: next, since: this.clock, rect: null }
+    } else {
+      this.prompt.prompt = next
+    }
+    if (this.hoverSeat && this.isTaken(this.hoverSeat)) this.hoverSeat = null
   }
 
   /**
@@ -458,8 +598,9 @@ export class WorldEngine {
       c.dir = r.dir
       c.moving = r.moving || dist > 2 // keep walking until the glide actually arrives
       if (c.moving) c.walkFrame += dt * 60
-      c.sittingSeat = c.moving ? null : this.seatAt(c.x, c.y)
+      c.sittingSeat = seatedOn(this.seats, c.x, c.y, c.moving)
       if (c.sittingSeat) c.dir = c.sittingSeat.dir
+      c.sitT = c.sittingSeat ? Math.min(1, (c.sitT ?? 0) + dt * 4.2) : 0
 
       const peer = peers[id]
       if (peer && this.appliedAvatar.get(id) !== peer.avatar) {
@@ -480,6 +621,7 @@ export class WorldEngine {
   // ---------- drawing ----------
 
   private render(time: number) {
+    this.clock = time
     const { ctx, canvas, session, zoom, dpr } = this
     const map = session.map
     const mapW = map.cols * TILE
@@ -520,24 +662,20 @@ export class WorldEngine {
       ctx.stroke()
     }
 
-    // Props and people share one depth-sorted pass so you walk behind trees and in front of tables.
-    const items: { sortY: number; draw: () => void }[] = []
-    for (const p of map.props) {
-      items.push({ sortY: (p.row + p.h) * TILE - (p.type === 'seat' ? 16 : 0), draw: () => drawPropItem(ctx, p, time) })
-    }
+    this.drawSeatRings(time)
+
+    // Props and people share one depth-sorted pass so you walk behind trees and in front of tables. A sofa or an
+    // armchair has two halves (propDepthItems), so the person sitting in it lands between them.
     const people = [this.player, ...this.remote.values()]
-    for (const c of people) {
-      items.push({
-        sortY: c.y + 12,
-        draw: () => {
-          ctx.globalAlpha = this.alphaFor(c)
-          drawCharacter(ctx, c, c.x, c.y, 1, time)
-          ctx.globalAlpha = 1
-        },
-      })
-    }
-    items.sort((a, b) => a.sortY - b.sortY)
-    for (const it of items) it.draw()
+    const peopleItems = people.map((c) => ({
+      sortY: c.y + 12,
+      draw: () => {
+        ctx.globalAlpha = this.alphaFor(c)
+        drawCharacter(ctx, c, c.x, c.y, 1, time)
+        ctx.globalAlpha = 1
+      },
+    }))
+    drawDepthSorted(ctx, this.statics, peopleItems, time, { x1: cx - viewW / 2, y1: cy - viewH / 2, x2: cx + viewW / 2, y2: cy + viewH / 2 })
 
     // lanterns and signs add light, string lights hang over everyone: after the people, before the name tags
     drawNight(ctx, this.night, time, { x1: cx - viewW / 2, y1: cy - viewH / 2, x2: cx + viewW / 2, y2: cy + viewH / 2 })
@@ -551,6 +689,117 @@ export class WorldEngine {
       drawCharacterOverlays(ctx, c, time, overlayScale, { minX: this.view.x - halfWide - c.x, maxX: this.view.x + halfWide - c.x })
     }
     ctx.globalAlpha = 1
+    this.drawPrompt(overlayScale, time)
+  }
+
+  /** A soft ring on the ground under the seat the button is offering (and under the one the mouse is over). */
+  private drawSeatRings(time: number) {
+    const { ctx } = this
+    const ring = (seat: Seat, strong: boolean) => {
+      const a = seatAnchor(seat)
+      const pulse = 0.5 + 0.5 * Math.sin(time * 0.006)
+      const lie = seatKind(seat.style).posture === 'lie'
+      const long = lie && (seat.dir === 'up' || seat.dir === 'down')
+      const wide = lie && !long
+      ctx.save()
+      ctx.lineWidth = 2.2
+      ctx.strokeStyle = strong ? `rgba(52, 211, 153, ${0.55 + pulse * 0.4})` : 'rgba(255, 255, 255, 0.7)'
+      ctx.fillStyle = strong ? 'rgba(52, 211, 153, 0.12)' : 'rgba(255, 255, 255, 0.1)'
+      ctx.beginPath()
+      ctx.ellipse(a.x, a.y + 4, long ? 19 : wide ? 30 : 23 + pulse * (strong ? 1.5 : 0), long ? 29 : wide ? 18 : 15 + pulse * (strong ? 1 : 0), 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    }
+    const offered = this.prompt?.prompt.kind === 'sit' ? this.prompt.prompt.seat : null
+    if (this.hoverSeat && this.hoverSeat !== offered) ring(this.hoverSeat, false)
+    if (offered) ring(offered, true)
+  }
+
+  /** The "Sit / Lie down / Stand up" button, in the world next to what it acts on. Clicking or tapping it, or pressing E, does it. */
+  private drawPrompt(scale: number, time: number) {
+    const st = this.prompt
+    if (!st) return
+    const { ctx } = this
+    const p = this.player
+    const age = (time - st.since) / 1000
+    const appear = Math.min(1, age / 0.18)
+    if (appear <= 0) return
+    const pop = 1 + 1.70158 * Math.pow(appear - 1, 3) + 1.70158 * Math.pow(appear - 1, 2) // overshoots a little, then settles
+
+    const seat = st.prompt.seat
+    const a = seatAnchor(seat)
+    // on whichever side of the seat the player is NOT on, so the button never covers them. Standing up: just below me.
+    const stand = st.prompt.kind === 'stand'
+    const below = stand ? true : p.y < a.y - 6
+    // never let it slide off the edge of the screen: a seat at the very edge still gets a button you can reach
+    const halfW = this.cssW / this.zoom / 2
+    const halfH = this.cssH / this.zoom / 2
+    const margin = 22 * scale
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+    const cx = clamp(stand ? p.x : a.x, this.view.x - halfW + margin * 2.4, this.view.x + halfW - margin * 2.4)
+    const cy = clamp(stand ? p.y + 38 : below ? a.y + 40 : a.y - 40, this.view.y - halfH + margin, this.view.y + halfH - margin)
+
+    const label = st.prompt.label
+    const big = this.coarse
+    const h = (big ? 36 : 28) * scale
+    const keyW = big ? 0 : 20 * scale
+    ctx.save()
+    ctx.font = `600 ${(big ? 15 : 13) * scale}px 'Instrument Sans Variable', Inter, system-ui, sans-serif`
+    const tw = ctx.measureText(label).width
+    const padL = (big ? 16 : 8) * scale
+    const w = padL + keyW + (keyW ? 8 * scale : 0) + tw + 14 * scale
+    const hover = this.hoverPrompt
+    const bob = Math.sin(time * 0.005) * 1.4 * scale
+
+    ctx.translate(cx, cy + bob)
+    ctx.scale(pop, pop)
+    ctx.globalAlpha = Math.min(1, appear * 1.4)
+    // pointer tail towards what it acts on
+    ctx.shadowColor = 'rgba(8, 12, 30, 0.4)'
+    ctx.shadowBlur = 12
+    ctx.shadowOffsetY = 3
+    ctx.fillStyle = hover ? '#10b981' : 'rgba(12, 18, 38, 0.94)'
+    ctx.beginPath()
+    ctx.roundRect(-w / 2, -h / 2, w, h, h / 2)
+    const t = 6 * scale
+    if (stand || below) {
+      ctx.moveTo(-t, -h / 2 + 0.5)
+      ctx.lineTo(t, -h / 2 + 0.5)
+      ctx.lineTo(0, -h / 2 - t)
+    } else {
+      ctx.moveTo(-t, h / 2 - 0.5)
+      ctx.lineTo(t, h / 2 - 0.5)
+      ctx.lineTo(0, h / 2 + t)
+    }
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.strokeStyle = hover ? 'rgba(255, 255, 255, 0.9)' : 'rgba(52, 211, 153, 0.8)'
+    ctx.lineWidth = 1.3
+    ctx.beginPath()
+    ctx.roundRect(-w / 2, -h / 2, w, h, h / 2)
+    ctx.stroke()
+
+    let x = -w / 2 + padL
+    if (keyW) {
+      ctx.fillStyle = hover ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.16)'
+      ctx.beginPath()
+      ctx.roundRect(x, -keyW / 2 + 1 * scale, keyW, keyW - 2 * scale, 5 * scale)
+      ctx.fill()
+      ctx.fillStyle = '#f8fafc'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('E', x + keyW / 2, 1.2 * scale)
+      x += keyW + 8 * scale
+    }
+    ctx.fillStyle = '#f8fafc'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, x, 1 * scale)
+    ctx.restore()
+
+    // remembered in WORLD pixels (before the pop-in scale) so the pointer can hit it
+    st.rect = { x: cx - w / 2, y: cy - h / 2, w, h }
   }
 
   /** People we cannot hear (and who cannot hear us) are drawn faded: the audio rule made visible. */

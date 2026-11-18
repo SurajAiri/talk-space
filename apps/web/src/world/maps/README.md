@@ -8,7 +8,10 @@ map touches nothing outside this folder.
 src/world/
   assets/        the "asset packs" (copy-pasteable, no app imports)
     tiles.ts       TILESET: every ground tile (char, name, solid, draw fn)
-    props.ts       PROP_CATALOG: every placeable object (size, solid, resize rules, draw fn), SEAT_STYLES
+    props.ts       PROP_CATALOG: every placeable object (size, solid, resize rules, draw fn), depth helpers
+    seats.ts       SEAT_KINDS (what each seat style lets you do) + how each one is drawn, in two passes
+    furniture.ts   the everyday props (sofa, tables, counter, desk, plants, lamp, fire, fountain...)
+    paint.ts       shared painting helpers (shadow, shade, rr, glow, bakedSprite)
   format/        the map file format (pure TS, also runs in Node)
     mapFile.ts     types, parseMapFile (reports ALL errors with paths), buildWorldMap, serializeMapFile
     ops.ts         pure edit operations + the JSON "ops script" interpreter (shared by GUI, CLI, AI)
@@ -17,6 +20,7 @@ src/world/
     data/*.map.json   <- the maps
     index.ts          auto-discovers data/*.map.json (Vite glob)
   editor/        dev-only GUI editor (EditorModel, ToolController are DOM-free and unit-testable)
+  interact.ts    sitting / lying / standing up: the rules (pure, unit-tested)
   render/, WorldEngine.ts, WorldSession.ts, hearing.ts, navigation.ts   runtime (unchanged by maps)
 tools/           maps.ts (CLI), mapStore.ts (disk I/O), vite-plugin-map-editor.ts (dev save endpoint)
 ```
@@ -66,3 +70,32 @@ Daytime maps have no such props, so this layer costs them nothing.
   has no matching file falls back to a plain voice/chat room.
 - All maps are bundled into the web app (small JSON). If you reach dozens of large maps, switch the
   glob in `index.ts` to lazy loading.
+
+## Seats, sitting and lying down
+
+A seat is a walk-on spot (`seats` in the map file). What it does comes from `SEAT_KINDS` in
+`assets/seats.ts`:
+
+| style | pose | seats you when you stop on it? |
+|---|---|---|
+| bench, stool, sofa_cushion, beanbag, office_chair, log_seat, armchair | sit | yes |
+| zabuton | sit cross-legged | yes |
+| deck_chair (the beach bed) | lie down | **no**, only on purpose |
+
+**Controls.** Near a free seat a button appears over it ("Sit" / "Lie down"). Press **E**, click it,
+or tap it. Clicking or tapping the seat itself does the same. When seated the button says "Stand up";
+moving also stands you up. Clicking a seat someone else is on walks you up to it instead.
+
+**How it stays in sync.** Nothing extra is sent over the network. You are on a seat when you stand
+still exactly on its centre; every screen works that out from the same map and the same position
+messages (`seatedOn` in `interact.ts`). "Sit" simply walks you onto the centre.
+
+**Drawing seats and sofas.** A seat paints in two passes (`base`, `front`) so a person sits *between*
+them: the cushion and legs behind, an armrest or a backrest (when they face away) in front. Any prop can
+do the same with `front` and `depth` in its catalog entry (the sofa does). Every renderer (room,
+editor, thumbnails, landing page) uses `propDepthItems` + `drawDepthSorted` from `render/scene.ts`, so
+they all agree. Adjacent benches facing the same way are drawn as one long bench, and a `sofa_horiz`
+faces the way the cushions on it look.
+
+**Adding a seat style:** add it to `SEAT_KINDS` (pose, verb, `auto`) and a painter to `PAINTERS` in
+`assets/seats.ts`. `pnpm props seats` renders every style in every direction, empty and occupied.

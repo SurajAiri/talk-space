@@ -2,9 +2,8 @@
  * A small picture of a map for room cards, drawn with the same tile and prop art the room uses,
  * just scaled down. Made once per map and cached as an image URL.
  */
-import { drawProp } from './assets/props.ts'
 import { drawTile } from './assets/tiles.ts'
-import { drawNight, nightPropsOf } from './render/scene.ts'
+import { drawDepthSorted, drawNight, nightPropsOf, propDepthItems } from './render/scene.ts'
 import { TILE, type WorldMap } from './types.ts'
 
 const cache = new Map<string, string>()
@@ -32,7 +31,7 @@ export function mapThumbnail(map: WorldMap, width = 320): string | null {
     }
   }
   // back to front, so things in front overlap the things behind them
-  for (const p of [...map.props].sort((a, b) => a.row + a.h - (b.row + b.h))) drawProp(g, p, 0)
+  drawDepthSorted(g, propDepthItems(map.props), [], 0)
 
   drawNight(g, nightPropsOf(map.props), 0)
 

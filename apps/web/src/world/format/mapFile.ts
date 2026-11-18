@@ -10,6 +10,7 @@
  */
 import { propDef, SEAT_STYLES } from '../assets/props.ts'
 import { DEFAULT_TILE, tileByChar } from '../assets/tiles.ts'
+import { computeSeatJoins, facingFromSeats } from '../interact.ts'
 import { DIRS, type Dir, type Prop, type Seat, type WorldMap } from '../types.ts'
 
 export const MAP_FORMAT_VERSION = 1
@@ -229,13 +230,6 @@ export function buildWorldMap(file: MapFile): WorldMap {
   const { cols, rows } = file.size
   const grid = file.tiles.map((row) => Array.from(row, (ch) => (tileByChar(ch) ?? DEFAULT_TILE).id))
 
-  const props: Prop[] = file.props.map((p) => {
-    const def = propDef(p.type)!
-    const out: Prop = { type: p.type, col: p.col, row: p.row, w: p.w ?? def.w, h: p.h ?? def.h, solid: p.solid ?? def.solid }
-    if (p.variant ?? def.variants?.[0]) out.variant = p.variant ?? def.variants![0]
-    if (p.color ?? def.color) out.color = p.color ?? def.color
-    return out
-  })
   const seats: Seat[] = file.seats.map((s, i) => ({
     id: `seat-${i}`,
     col: s.col,
@@ -244,6 +238,16 @@ export function buildWorldMap(file: MapFile): WorldMap {
     style: s.style,
     color: s.color ?? DEFAULT_SEAT_COLOR,
   }))
+  computeSeatJoins(seats) // a row of benches becomes one long bench
+
+  const props: Prop[] = file.props.map((p) => {
+    const def = propDef(p.type)!
+    const out: Prop = { type: p.type, col: p.col, row: p.row, w: p.w ?? def.w, h: p.h ?? def.h, solid: p.solid ?? def.solid }
+    if (p.variant ?? def.variants?.[0]) out.variant = p.variant ?? def.variants![0]
+    if (p.color ?? def.color) out.color = p.color ?? def.color
+    if (def.faces) out.facing = facingFromSeats(out, seats) // a sofa faces where its cushions look
+    return out
+  })
   // seats are also drawn as (walk-through) props so they take part in depth sorting
   for (const seat of seats) props.push({ type: 'seat', col: seat.col, row: seat.row, w: 1, h: 1, solid: false, seat })
 

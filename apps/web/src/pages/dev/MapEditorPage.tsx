@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { PROP_CATALOG, propDef, SEAT_STYLES } from '../../world/assets/props.ts'
+import { PROP_CATALOG, propDef, SEAT_KINDS, SEAT_STYLES } from '../../world/assets/props.ts'
 import { DEFAULT_TILE, TILESET } from '../../world/assets/tiles.ts'
 import { EditorModel, type Selection, type ToolId } from '../../world/editor/EditorModel.ts'
 import { EditorView, type Layers } from '../../world/editor/EditorView.ts'
@@ -316,7 +316,7 @@ export default function MapEditorPage() {
           </label>
           <label className="me-field">
             <span>style</span>
-            <select value={s.style} onChange={(e) => model.commit(updateSeat(map, sel.index, { style: e.target.value }))}>{SEAT_STYLES.map((d) => <option key={d}>{d}</option>)}</select>
+            <select value={s.style} onChange={(e) => model.commit(updateSeat(map, sel.index, { style: e.target.value }))}>{SEAT_STYLES.map((d) => <option key={d} value={d}>{SEAT_KINDS[d].label}</option>)}</select>
           </label>
           <label className="me-field">
             <span>color</span>
@@ -453,7 +453,7 @@ export default function MapEditorPage() {
 
         {snap.tool === 'seat' && (
           <Section title="Seat settings">
-            <label className="me-field"><span>style</span><select value={snap.seatStyle} onChange={(e) => model.set({ seatStyle: e.target.value })}>{SEAT_STYLES.map((s) => <option key={s}>{s}</option>)}</select></label>
+            <label className="me-field"><span>style</span><select value={snap.seatStyle} onChange={(e) => model.set({ seatStyle: e.target.value })}>{SEAT_STYLES.map((s) => <option key={s} value={s}>{SEAT_KINDS[s].label}</option>)}</select></label>
             <label className="me-field"><span>faces</span><select value={snap.seatDir} onChange={(e) => model.set({ seatDir: e.target.value as Dir })}>{DIRS.map((d) => <option key={d}>{d}</option>)}</select></label>
             <label className="me-field"><span>color</span><input type="color" value={snap.seatColor} onChange={(e) => model.set({ seatColor: e.target.value })} /></label>
           </Section>

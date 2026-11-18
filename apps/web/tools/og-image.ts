@@ -17,7 +17,7 @@ import { createCanvas, GlobalFonts, type Canvas, type SKRSContext2D } from '@nap
 import { appearanceFor } from '../src/world/appearance.ts'
 import { HEARING, hearingGain } from '../src/world/hearing.ts'
 import { drawCharacter, drawCharacterOverlays } from '../src/world/render/character.ts'
-import { drawPropItem, drawWorldTiles } from '../src/world/render/scene.ts'
+import { drawDepthSorted, drawWorldTiles, propDepthItems } from '../src/world/render/scene.ts'
 import { buildWorldMap, parseMapFile } from '../src/world/format/mapFile.ts'
 import { TILE, type Character, type Dir } from '../src/world/types.ts'
 
@@ -171,7 +171,6 @@ function renderScene(w: number, h: number): Canvas {
     },
   }))
   const items: { sortY: number; draw: () => void }[] = []
-  for (const p of map.props) items.push({ sortY: (p.row + p.h) * TILE - (p.type === 'seat' ? 16 : 0), draw: () => drawPropItem(d, p, TIME) })
   for (const { actor, ch } of people) {
     items.push({
       sortY: ch.y + 12,
@@ -182,8 +181,7 @@ function renderScene(w: number, h: number): Canvas {
       },
     })
   }
-  items.sort((a, b) => a.sortY - b.sortY)
-  for (const it of items) it.draw()
+  drawDepthSorted(d, propDepthItems(map.props), items, TIME)
 
   // name tags, speech bubbles and the "how well do I hear them" chips, a little larger so they survive a small thumbnail
   const os = 1.3

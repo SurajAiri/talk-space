@@ -3,7 +3,7 @@ import { appearanceFor } from '../../world/appearance'
 import { hearingGain, HEARING, zoneAt } from '../../world/hearing'
 import { findPath, isTileBlocked } from '../../world/navigation'
 import type { Waypoint } from '../../world/navigation'
-import { drawProp } from '../../world/assets/props'
+import { drawDepthSorted, propDepthItems } from '../../world/render/scene'
 import { drawTile } from '../../world/assets/tiles'
 import { drawCharacter, drawCharacterOverlays } from '../../world/render/character'
 import { loadWorldMap } from '../../world/maps'
@@ -104,7 +104,7 @@ function bake(map: WorldMap): HTMLCanvasElement {
         if (id !== undefined) drawTile(g, id, col, r, 0)
       }
     }
-    for (const p of [...map.props].sort((a, b) => a.row + a.h - (b.row + b.h))) drawProp(g, p, 0)
+    drawDepthSorted(g, propDepthItems(map.props), [], 0)
   }
   baked.set(map.key, c)
   return c

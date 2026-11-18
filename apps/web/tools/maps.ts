@@ -99,7 +99,7 @@ ${props}
   Overlapping SOLID props are a warning. Non-solid props can be walked through.
 
 SEATS  A person who stops on a seat tile sits and faces "dir" (${DIRS.join('|')}).
-  styles: ${SEAT_STYLES.join(', ')}. "sofa_cushion" draws nothing: put it on top of a sofa_horiz.
+  styles: ${SEAT_STYLES.join(', ')}. "sofa_cushion" draws nothing itself: put it on top of a sofa_horiz, which faces the way its cushions look. "deck_chair" is a beach bed: people LIE on it (only when they choose to, never just by stopping on it). A row of adjacent "bench" seats facing the same way is drawn as one long bench.
 
 ZONES  (this is the audio model: the reason maps exist)
   Everyone standing inside the SAME zone hears each other at full volume, at any distance.

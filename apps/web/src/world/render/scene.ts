@@ -1,4 +1,4 @@
-import { drawProp, propDef, type Light } from '../assets/props.ts'
+import { drawProp, drawPropFront, propDef, propDepth, type Light } from '../assets/props.ts'
 import { drawTile } from '../assets/tiles.ts'
 import { TILE, type Prop } from '../types.ts'
 
@@ -23,6 +23,57 @@ export function drawWorldTiles(
 }
 
 export { drawProp as drawPropItem }
+
+// ---- depth sorting, shared by every renderer ---------------------------------------------------------------------
+// Props and people are painted in one pass sorted by "how far down the screen their feet are", so you walk behind
+// trees and in front of tables. A prop may have TWO entries (PropDef.front): a sofa's body sorts just behind a person
+// sitting on it and its arms just in front, so they sit IN it.
+
+/** One thing to paint at a depth. `x1..y2` is its bounding box in world px (with margin), for skipping off-screen ones. */
+export interface DepthItem {
+  sortY: number
+  draw: (g: CanvasRenderingContext2D, time: number) => void
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+const MARGIN_X = 40
+const MARGIN_TOP = 72 // trees, lamps and the like draw well above their footprint
+const MARGIN_BOTTOM = 28
+
+/** The paint passes of a list of props, sorted back to front. Built once per map (props never move). */
+export function propDepthItems(props: readonly Prop[]): DepthItem[] {
+  const items: DepthItem[] = []
+  for (const p of props) {
+    const def = propDef(p.type)
+    if (!def) continue
+    const depth = propDepth(p)
+    const box = { x1: p.col * TILE - MARGIN_X, y1: p.row * TILE - MARGIN_TOP, x2: (p.col + p.w) * TILE + MARGIN_X, y2: (p.row + p.h) * TILE + MARGIN_BOTTOM }
+    items.push({ sortY: depth.base, draw: (g, t) => drawProp(g, p, t), ...box })
+    if (def.front) items.push({ sortY: depth.front, draw: (g, t) => drawPropFront(g, p, t), ...box })
+  }
+  return items.sort((a, b) => a.sortY - b.sortY)
+}
+
+/** Paint props (pre-sorted by propDepthItems) with `extra` items (people) merged in at their depth. `view` skips what is off screen. */
+export function drawDepthSorted(
+  g: CanvasRenderingContext2D,
+  statics: readonly DepthItem[],
+  extra: { sortY: number; draw: () => void }[],
+  time: number,
+  view?: WorldRect,
+) {
+  extra.sort((a, b) => a.sortY - b.sortY)
+  let e = 0
+  for (const it of statics) {
+    while (e < extra.length && extra[e]!.sortY <= it.sortY) extra[e++]!.draw()
+    if (view && (it.x2 < view.x1 || it.x1 > view.x2 || it.y2 < view.y1 || it.y1 > view.y2)) continue
+    it.draw(g, time)
+  }
+  while (e < extra.length) extra[e++]!.draw()
+}
 
 // ---- the night layer: light pools and things you walk under --------------------------------------
 // A map is lit by its props (PropDef.light / PropDef.overhead). Daytime maps have no such props, so for them

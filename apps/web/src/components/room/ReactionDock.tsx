@@ -18,7 +18,7 @@ function isTyping(e: KeyboardEvent): boolean {
 
 /**
  * Make your character do something: a dance or a wave, an emoji, or a word in big animated letters.
- * Everything here is a fixed list (world/fx.ts); picking one plays it on you and tells the room. Press E to open.
+ * Everything here is a fixed list (world/fx.ts); picking one plays it on you and tells the room. Press R to open (E is for sitting, standing and other interactions).
  * It renders as a top-bar button (a thumb button on phones) with its panel hanging off it: below on a laptop, above on a phone.
  */
 export default function ReactionDock({ session }: { session: WorldSession }) {
@@ -30,7 +30,7 @@ export default function ReactionDock({ session }: { session: WorldSession }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return setOpen(false)
-      if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !isTyping(e)) {
+      if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !isTyping(e)) {
         e.preventDefault()
         setOpen((v) => !v)
       }
@@ -57,7 +57,7 @@ export default function ReactionDock({ session }: { session: WorldSession }) {
 
   return (
     <div className="rdock" ref={wrap}>
-      <button type="button" className={`rbtn rbtn-react ${open ? 'is-on' : ''}`} aria-expanded={open} aria-haspopup="dialog" aria-label="Emotes and reactions" title="Emotes and reactions (E)" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className={`rbtn rbtn-react ${open ? 'is-on' : ''}`} aria-expanded={open} aria-haspopup="dialog" aria-label="Emotes and reactions" title="Emotes and reactions (R)" onClick={() => setOpen((v) => !v)}>
         <SmileIcon size={19} />
         <span className="rbtn-label">React</span>
       </button>

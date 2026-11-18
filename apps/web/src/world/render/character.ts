@@ -1,5 +1,6 @@
 // Ported from the GatherSpace template (pure canvas drawing, no engine dependency).
-import type { Character } from '../types.ts';
+import { seatKind } from '../assets/seats.ts';
+import type { Character, Dir } from '../types.ts';
 import { emotePose, type Pose } from './pose.ts';
 import { drawReaction } from './reaction.ts';
 
@@ -354,6 +355,201 @@ function drawAccessory(g: CanvasRenderingContext2D, char: Character) {
   }
 }
 
+/** The head: skin, eyes, mouth, the front of the hair and the accessory. Drawn around (0, -16), the same for every posture. */
+function drawFace(g: CanvasRenderingContext2D, char: Character, laugh: boolean, calm = false) {
+  g.fillStyle = char.skin;
+  g.beginPath();
+  g.roundRect(-10, -25, 20, 18, 6);
+  g.fill();
+
+  if (char.dir !== 'up') {
+    const eyeOffsetX = char.dir === 'left' ? -2 : char.dir === 'right' ? 2 : 0;
+    g.fillStyle = 'rgba(244, 63, 94, 0.28)';
+    g.fillRect(-8 + eyeOffsetX, -14, 3, 2);
+    g.fillRect(5 + eyeOffsetX, -14, 3, 2);
+
+    if (calm) {
+      // resting: eyes closed, a small smile. This is also what tells a lying person from a standing one at a glance.
+      g.strokeStyle = '#0f172a';
+      g.lineWidth = 1.5;
+      g.lineCap = 'round';
+      g.beginPath();
+      g.arc(-3.7 + eyeOffsetX, -16.2, 2.2, 0.15 * Math.PI, 0.85 * Math.PI);
+      g.arc(3.7 + eyeOffsetX, -16.2, 2.2, 0.15 * Math.PI, 0.85 * Math.PI);
+      g.stroke();
+    } else {
+      g.fillStyle = '#0f172a';
+      g.fillRect(-5 + eyeOffsetX, -17, 2.5, 3.5);
+      g.fillRect(2.5 + eyeOffsetX, -17, 2.5, 3.5);
+
+      g.fillStyle = '#ffffff';
+      g.fillRect(-4.5 + eyeOffsetX, -17, 1, 1);
+      g.fillRect(3 + eyeOffsetX, -17, 1, 1);
+    }
+
+    if (calm && !laugh) {
+      g.strokeStyle = '#7c2d12';
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.arc(eyeOffsetX, -12.6, 2.6, 0.2 * Math.PI, 0.8 * Math.PI);
+      g.stroke();
+    } else if (laugh) {
+      g.fillStyle = '#7f1d1d';
+      g.beginPath();
+      g.ellipse(eyeOffsetX, -11.2, 2.8, 2.2, 0, 0, TAU);
+      g.fill();
+      g.fillStyle = '#fb7185';
+      g.fillRect(-1.2 + eyeOffsetX, -10.4, 2.4, 1);
+    } else {
+      g.fillStyle = '#7c2d12';
+      g.fillRect(-2 + eyeOffsetX, -12, 4, 1.5);
+    }
+  }
+
+  drawHairFront(g, char);
+  drawAccessory(g, char);
+
+}
+
+const ease = (t: number) => t * t * (3 - 2 * t);
+
+/** One leg-and-arm layout per posture and facing. All in the character's own frame: origin = tile centre, feet at +14 when standing. */
+function drawSeatedLegs(g: CanvasRenderingContext2D, char: Character, dir: Dir, cross: boolean) {
+  const pants = char.pants || '#1e293b';
+  const shoe = '#0f172a';
+  if (cross) {
+    // sitting cross-legged: knees out to each side, the shins crossed in front
+    g.fillStyle = pants;
+    g.beginPath();
+    g.arc(-10, 9.5, 3.8, 0, TAU);
+    g.arc(10, 9.5, 3.8, 0, TAU);
+    g.fill();
+    g.beginPath();
+    g.roundRect(-11, 8, 22, 6.5, 3.2);
+    g.fill();
+    g.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    g.fillRect(-9, 8.6, 18, 1.2);
+    g.fillStyle = shoe;
+    g.beginPath();
+    g.roundRect(-6.5, 12, 6, 3.4, 1.6);
+    g.roundRect(0.5, 12.6, 6, 3.4, 1.6);
+    g.fill();
+    return;
+  }
+  if (dir === 'up') return; // facing away: the legs are hidden behind the body
+  if (dir === 'down') {
+    for (const x of [-7, 1.5]) {
+      g.fillStyle = pants;
+      g.fillRect(x, 5, 5.5, 5.5); // thigh, foreshortened towards us
+      g.fillRect(x + 0.4, 10, 4.8, 5.5); // shin hanging down
+      g.fillStyle = 'rgba(0, 0, 0, 0.16)';
+      g.fillRect(x, 9.6, 5.5, 1.1);
+      g.fillStyle = shoe;
+      g.fillRect(x - 0.6, 15, 6.4, 3);
+    }
+    return;
+  }
+  // from the side: thigh out in front, shin down
+  const s = dir === 'right' ? 1 : -1;
+  g.save();
+  g.scale(s, 1);
+  for (const [dx, dy, c] of [[0, -1.4, shade(pants, -0.22)], [0, 0, pants]] as const) {
+    g.fillStyle = c;
+    g.fillRect(-2 + dx, 5 + dy, 12, 5.2); // thigh
+    g.fillRect(6 + dx, 9.6 + dy, 4.8, 6); // shin
+    g.fillStyle = shoe;
+    g.fillRect(6 + dx, 15 + dy, 7.2, 3);
+  }
+  g.restore();
+}
+
+function drawSeatedArms(g: CanvasRenderingContext2D, char: Character, dir: Dir) {
+  if (dir === 'up') {
+    g.fillStyle = char.shirt;
+    g.fillRect(-12, -6, 4, 9);
+    g.fillRect(8, -6, 4, 9);
+    return;
+  }
+  if (dir === 'down') {
+    // hands resting in the lap
+    g.fillStyle = char.shirt;
+    g.fillRect(-12, -6, 4, 10);
+    g.fillRect(8, -6, 4, 10);
+    g.fillStyle = char.skin;
+    g.fillRect(-10.5, 3.4, 4, 3.4);
+    g.fillRect(6.5, 3.4, 4, 3.4);
+    return;
+  }
+  const s = dir === 'right' ? 1 : -1;
+  g.save();
+  g.scale(s, 1);
+  g.fillStyle = char.shirt;
+  g.fillRect(-3, -6, 4, 8); // upper arm
+  g.fillRect(-1, 1, 8, 3.8); // forearm
+  g.fillStyle = char.skin;
+  g.fillRect(6.4, 1.2, 3.4, 3.6);
+  g.restore();
+}
+
+/** Lying on a beach bed: head on the pillow, arms at the sides, feet up. Drawn with the head kept upright so the face reads. */
+function drawLying(g: CanvasRenderingContext2D, char: Character, time: number, laugh: boolean, t: number) {
+  const dir = char.sittingSeat?.dir ?? 'down';
+  const rot = dir === 'down' ? 0 : dir === 'up' ? Math.PI : dir === 'left' ? Math.PI / 2 : -Math.PI / 2;
+  // settling onto the bed: a little drop, then still. Breathing once there.
+  const drop = -(1 - ease(t)) * 9 + Math.sin(time * 0.0021 + char.id.length) * 0.45 * ease(t);
+  const hx = 12 * Math.sin(rot);
+  const hy = -12 * Math.cos(rot);
+  g.translate(0, drop);
+
+  const head = () => {
+    g.save();
+    g.translate(hx, hy + 16.5);
+    return () => g.restore();
+  };
+  // hair that sits behind the head, then the body, then the face on top
+  let end = head();
+  drawHairBehind(g, char);
+  end();
+
+  g.save();
+  g.rotate(rot + (char.id.length % 2 ? 0.06 : -0.06)); // nobody lies perfectly straight
+  g.scale(1, 0.8); // lying on the back: the body is foreshortened, which is what makes it read as lying
+  g.fillStyle = char.pants || '#1e293b';
+  g.beginPath();
+  g.roundRect(-6.6, 6, 5.6, 14, 2);
+  g.roundRect(1, 6, 5.6, 14, 2);
+  g.fill();
+  g.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  g.fillRect(-6.4, 6, 1.2, 14);
+  g.fillRect(1.2, 6, 1.2, 14);
+  g.fillStyle = '#0f172a';
+  g.beginPath();
+  g.roundRect(-8.2, 19.4, 7, 4.2, 2);
+  g.roundRect(1.2, 19.4, 7, 4.2, 2);
+  g.fill();
+  g.save();
+  g.translate(0, 3.4);
+  g.fillStyle = char.shirt;
+  g.beginPath();
+  g.roundRect(-9.6, -8, 19.2, 15, 4);
+  g.fill();
+  g.fillStyle = 'rgba(255, 255, 255, 0.22)';
+  g.fillRect(-4, -8, 8, 2);
+  drawShirtStyle(g, { ...char, dir: 'down' });
+  g.restore();
+  g.fillStyle = char.shirt;
+  g.fillRect(-13.4, -3, 3.8, 10);
+  g.fillRect(9.6, -3, 3.8, 10);
+  g.fillStyle = char.skin;
+  g.fillRect(-13.4, 6.6, 3.8, 3.4);
+  g.fillRect(9.6, 6.6, 3.8, 3.4);
+  g.restore();
+
+  end = head();
+  drawFace(g, { ...char, dir: dir === 'up' ? 'down' : dir }, laugh, true);
+  end();
+}
+
 export function drawCharacter(
   g: CanvasRenderingContext2D,
   char: Character,
@@ -366,10 +562,31 @@ export function drawCharacter(
   g.translate(centerX, centerY);
   g.scale(scale, scale);
 
-  const isSitting = Boolean(char.sittingSeat);
+  const seat = char.sittingSeat;
+  const kind = seat ? seatKind(seat.style) : null;
+  const isSitting = Boolean(seat);
+  const settle = ease(char.sitT ?? 1);
   const pose: Pose | null = char.emote ? emotePose(char.emote.id, char.emote.age) : null;
   // seated people can wave and clap but not leap about: keep their arms, drop the body movement
   const bodyPose = pose && !isSitting ? pose : null;
+
+  if (isSitting && kind?.posture === 'lie') {
+    if (char.isPlayer) {
+      g.strokeStyle = 'rgba(52, 211, 153, 0.8)';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.ellipse(0, 3, seat!.dir === 'left' || seat!.dir === 'right' ? 28 : 17, seat!.dir === 'left' || seat!.dir === 'right' ? 15 : 27, 0, 0, TAU);
+      g.stroke();
+    }
+    drawLying(g, char, time, Boolean(pose?.laugh), char.sitT ?? 1);
+    g.restore();
+    return;
+  }
+
+  const cross = kind?.posture === 'cross';
+  const dir = char.dir;
+  // sitting: the hips are lower than standing hips (more so in a beanbag), and we hop down into it
+  const seatDrop = isSitting ? (3 + (kind?.sink ?? 0)) * settle - (1 - settle) * 5 : 0;
 
   const bounce = char.dancing
     ? Math.abs(Math.sin(time * 0.015)) * -7
@@ -377,14 +594,17 @@ export function drawCharacter(
     ? bodyPose.bob
     : char.moving
     ? Math.abs(Math.sin(char.walkFrame * 0.35)) * -3
-    : Math.sin(time * 0.003 + (char.id.length * 1.7)) * -1;
+    : Math.sin(time * 0.003 + (char.id.length * 1.7)) * (isSitting ? -0.5 : -1);
 
   const legSwing = char.moving ? Math.sin(char.walkFrame * 0.35) * 4 : 0;
 
-  g.fillStyle = 'rgba(15, 23, 42, 0.35)';
-  g.beginPath();
-  g.ellipse(0, 14, 12, 5, 0, 0, TAU);
-  g.fill();
+  if (!isSitting) {
+    // a seat casts its own shadow
+    g.fillStyle = 'rgba(15, 23, 42, 0.35)';
+    g.beginPath();
+    g.ellipse(0, 14, 12, 5, 0, 0, TAU);
+    g.fill();
+  }
 
   if (char.isPlayer) {
     g.strokeStyle = 'rgba(52, 211, 153, 0.8)';
@@ -394,7 +614,7 @@ export function drawCharacter(
     g.stroke();
   }
 
-  g.translate(bodyPose ? bodyPose.sway : 0, bounce);
+  g.translate(bodyPose ? bodyPose.sway : 0, bounce + seatDrop);
   if (bodyPose?.tilt) {
     g.translate(0, 12);
     g.rotate(bodyPose.tilt);
@@ -402,14 +622,10 @@ export function drawCharacter(
   }
   if (bodyPose && bodyPose.spin !== null) g.scale(Math.cos(bodyPose.spin * TAU) || 0.02, 1);
 
-  g.fillStyle = char.pants || '#1e293b';
   if (isSitting) {
-    g.fillRect(-7, 5, 6, 6);
-    g.fillRect(1, 5, 6, 6);
-    g.fillStyle = '#0f172a';
-    g.fillRect(-8, 9, 6, 3);
-    g.fillRect(2, 9, 6, 3);
+    drawSeatedLegs(g, char, dir, cross);
   } else {
+    g.fillStyle = char.pants || '#1e293b';
     g.fillRect(-6, 4 + legSwing * 0.5, 5, 9);
     g.fillRect(1, 4 - legSwing * 0.5, 5, 9);
     g.fillStyle = '#0f172a';
@@ -438,6 +654,8 @@ export function drawCharacter(
   if (pose && (pose.armL !== null || pose.armR !== null)) {
     drawArm(g, char, -1, pose.armL ?? 0);
     drawArm(g, char, 1, pose.armR ?? 0);
+  } else if (isSitting) {
+    drawSeatedArms(g, char, dir);
   } else {
     const armSwing = char.dancing ? Math.sin(time * 0.02) * 6 : char.moving ? -legSwing : 0;
     g.fillStyle = char.shirt;
@@ -448,40 +666,7 @@ export function drawCharacter(
     g.fillRect(8, 2 - armSwing * 0.4, 4, 3);
   }
 
-  g.fillStyle = char.skin;
-  g.beginPath();
-  g.roundRect(-10, -25, 20, 18, 6);
-  g.fill();
-
-  if (char.dir !== 'up') {
-    const eyeOffsetX = char.dir === 'left' ? -2 : char.dir === 'right' ? 2 : 0;
-    g.fillStyle = 'rgba(244, 63, 94, 0.28)';
-    g.fillRect(-8 + eyeOffsetX, -14, 3, 2);
-    g.fillRect(5 + eyeOffsetX, -14, 3, 2);
-
-    g.fillStyle = '#0f172a';
-    g.fillRect(-5 + eyeOffsetX, -17, 2.5, 3.5);
-    g.fillRect(2.5 + eyeOffsetX, -17, 2.5, 3.5);
-
-    g.fillStyle = '#ffffff';
-    g.fillRect(-4.5 + eyeOffsetX, -17, 1, 1);
-    g.fillRect(3 + eyeOffsetX, -17, 1, 1);
-
-    if (pose?.laugh) {
-      g.fillStyle = '#7f1d1d';
-      g.beginPath();
-      g.ellipse(eyeOffsetX, -11.2, 2.8, 2.2, 0, 0, TAU);
-      g.fill();
-      g.fillStyle = '#fb7185';
-      g.fillRect(-1.2 + eyeOffsetX, -10.4, 2.4, 1);
-    } else {
-      g.fillStyle = '#7c2d12';
-      g.fillRect(-2 + eyeOffsetX, -12, 4, 1.5);
-    }
-  }
-
-  drawHairFront(g, char);
-  drawAccessory(g, char);
+  drawFace(g, char, Boolean(pose?.laugh));
 
   g.restore();
 }
@@ -551,6 +736,23 @@ function wrapLines(g: CanvasRenderingContext2D, text: string, maxW: number, maxL
   return kept
 }
 
+/** What a name tag shows: the first name only ("Ada Lovelace" -> "Ada"). A name that is all spaces falls back to itself. */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+/** Top edge of a name tag above a standing person, in px from their tile centre (negative = up). */
+const TAG_Y = -62;
+
+/** How far the head sits lower than when standing (sitting in a seat, sinking into a beanbag, lying down), so the tag follows it. */
+function tagDrop(char: Character): number {
+  const seat = char.sittingSeat;
+  if (!seat) return 0;
+  const k = seatKind(seat.style);
+  const settle = ease(char.sitT ?? 1);
+  return (k.posture === 'lie' ? 9 : 3 + k.sink) * settle;
+}
+
 /**
  * Name tag, speech bubble and reaction above a person. `scale` grows them when the camera is zoomed
  * out (a phone shows the whole room small) so the text stays readable.
@@ -567,13 +769,15 @@ export function drawCharacterOverlays(
   g.translate(char.x, char.y);
   g.scale(scale, scale);
 
-  const tagText = char.name + (char.flair ? ' ' + char.flair : '');
+  const tagText = firstName(char.name) + (char.flair ? ' ' + char.flair : '');
   g.font = `600 12px ${UI_FONT}`;
   const textWidth = g.measureText(tagText).width;
   const pillW = textWidth + 26;
   const pillH = 22;
   const pillX = -pillW / 2;
-  const pillY = -52;
+  // clear of the tallest hair, hats and crowns (they reach about 42 above the tile centre), and it follows the head down
+  // when somebody sinks into a beanbag or lies on a bed
+  const pillY = TAG_Y + tagDrop(char);
 
   g.fillStyle = 'rgba(12, 18, 38, 0.9)';
   g.beginPath();

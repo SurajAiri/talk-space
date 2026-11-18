@@ -1,6 +1,6 @@
 import { drawProp, propDef } from '../assets/props.ts'
 import { isTileBlocked } from '../navigation.ts'
-import { drawWorldTiles } from '../render/scene.ts'
+import { drawDepthSorted, drawWorldTiles, propDepthItems } from '../render/scene.ts'
 import { TILE, type Prop } from '../types.ts'
 import type { EditorModel } from './EditorModel.ts'
 import type { ToolController } from './ToolController.ts'
@@ -187,10 +187,8 @@ export class EditorView {
 
     drawWorldTiles(g, world.grid, c1, c2, r1, r2, time)
 
-    // props + seats, depth-sorted with the engine's rule so the editor shows what players see
-    const items = world.props.map((p) => ({ y: (p.row + p.h) * TILE - (p.type === 'seat' ? 16 : 0), p }))
-    items.sort((a, b) => a.y - b.y)
-    for (const it of items) drawProp(g, it.p, time)
+    // props + seats, depth-sorted with the room's own rule so the editor shows what players see
+    drawDepthSorted(g, propDepthItems(world.props), [], time)
 
     if (this.layers.blocked) {
       g.fillStyle = 'rgba(239, 68, 68, 0.4)'

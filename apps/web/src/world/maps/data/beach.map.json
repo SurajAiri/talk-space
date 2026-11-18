@@ -130,7 +130,10 @@
     {"type":"rock","col":28,"row":13,"variant":"mossy"},
     {"type":"rock","col":12,"row":20,"variant":"grey"},
     {"type":"bush","col":22,"row":4,"variant":"flowering"},
-    {"type":"bush","col":28,"row":6,"variant":"green"}
+    {"type":"bush","col":28,"row":6,"variant":"green"},
+    {"type":"parasol","col":33,"row":20,"color":"#ef4444"},
+    {"type":"parasol","col":37,"row":20,"color":"#0ea5e9"},
+    {"type":"parasol","col":41,"row":20,"color":"#f59e0b"}
   ],
   "seats": [
     {"col":32,"row":9,"dir":"up","style":"stool","color":"#f97316"},

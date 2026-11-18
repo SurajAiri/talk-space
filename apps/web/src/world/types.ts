@@ -11,6 +11,13 @@ export interface Seat {
   dir: Dir
   style: string
   color: string
+  /**
+   * Neighbouring seats of the same style and direction, in the seat's own frame (left/right as seen by someone
+   * sitting in it). Set by buildWorldMap so a row of benches is drawn as ONE long bench. Absent = stands alone.
+   */
+  join?: { left: boolean; right: boolean }
+  /** RUNTIME ONLY, set by the engine every frame: someone is sitting here (beanbags squash, cushions dent). */
+  taken?: boolean
 }
 
 export interface Prop {
@@ -25,6 +32,11 @@ export interface Prop {
   variant?: string
   /** tint, only for props whose catalog entry declares a default colour */
   color?: string
+  /**
+   * Which way it faces. Worked out by buildWorldMap from the seats on top of it (a sofa faces where its cushions
+   * look), only for props whose catalog entry says `faces`. Absent = down.
+   */
+  facing?: Dir
 }
 
 /** Inclusive tile rectangle. */
@@ -74,6 +86,11 @@ export interface Character {
   walkFrame: number
   dancing: boolean
   sittingSeat: Seat | null
+  /**
+   * 0..1: how far into the seat they are (the engine eases it up over a fraction of a second after they settle), so
+   * sitting down and lying down are animated instead of a pop. Absent = fully settled.
+   */
+  sitT?: number
   skin: string
   hairStyle: string
   hairColor: string
