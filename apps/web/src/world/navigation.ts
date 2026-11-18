@@ -84,6 +84,60 @@ export function findPath(
   return path.reverse()
 }
 
+/**
+ * Like findPath, but the goal is "close enough to `target`": any free tile at most `within` tiles away (Chebyshev,
+ * so 0 = the target's own tile, 1 = it or any of its 8 neighbours). Used to walk after a moving person, who may be
+ * standing somewhere that is not a free tile (a modified client can claim a wall), and who needs no exact tile.
+ * Returns waypoints excluding the start ([] when we are already close enough), or null if nothing close is reachable.
+ */
+export function findPathToward(
+  map: WorldMap,
+  from: { col: number; row: number },
+  target: { col: number; row: number },
+  within = 0,
+): Waypoint[] | null {
+  const COLS = map.cols
+  const close = (c: number, r: number) => Math.max(Math.abs(c - target.col), Math.abs(r - target.row)) <= within
+  if (close(from.col, from.row)) return []
+
+  const idx = (c: number, r: number) => r * COLS + c
+  const prev = new Int32Array(COLS * map.rows).fill(-2) // -2 unvisited, -1 start
+  const queue: number[] = [idx(from.col, from.row)]
+  prev[queue[0]!] = -1
+  const steps = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+    [1, 1], [1, -1], [-1, 1], [-1, -1],
+  ] as const
+
+  let goal = -1
+  for (let head = 0; head < queue.length && goal < 0; head++) {
+    const cur = queue[head]!
+    const c = cur % COLS
+    const r = Math.floor(cur / COLS)
+    for (const [dc, dr] of steps) {
+      const nc = c + dc
+      const nr = r + dr
+      if (isTileBlocked(map, nc, nr)) continue
+      if (dc !== 0 && dr !== 0 && (isTileBlocked(map, c + dc, r) || isTileBlocked(map, c, r + dr))) continue
+      const n = idx(nc, nr)
+      if (prev[n] !== -2) continue
+      prev[n] = cur
+      if (close(nc, nr)) {
+        goal = n
+        break
+      }
+      queue.push(n)
+    }
+  }
+  if (goal < 0) return null
+
+  const path: Waypoint[] = []
+  for (let cur = goal; prev[cur] !== -1; cur = prev[cur]!) {
+    path.push({ x: ((cur % COLS) + 0.5) * TILE, y: (Math.floor(cur / COLS) + 0.5) * TILE })
+  }
+  return path.reverse()
+}
+
 /** Flood fill (4-way) of every tile reachable by walking from `from`. 1 = reachable. */
 export function reachableFrom(map: WorldMap, from: { col: number; row: number }): Uint8Array {
   const seen = new Uint8Array(map.cols * map.rows)

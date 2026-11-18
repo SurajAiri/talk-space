@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { REPORT_REASONS } from '../lib/rooms'
+import { usePeerFollow } from '../hooks/useFollow'
 import { useAuthStore } from '../store/auth.store'
 import { useRoomStore } from '../store/room.store'
 import { TextArea } from './form/fields'
-import { BanIcon, ChatIcon, FlagIcon, XIcon } from './Icons'
+import { BanIcon, ChatIcon, FlagIcon, FollowIcon, XIcon } from './Icons'
 
 /** Block / report / (host) remove, for one other person in the room. */
 export default function PeerActions({ peerId, name, onMessage }: { peerId: string; name: string; onMessage?: () => void }) {
@@ -15,6 +16,9 @@ export default function PeerActions({ peerId, name, onMessage }: { peerId: strin
   const unblockPeer = useRoomStore((s) => s.unblockPeer)
   const kickPeer = useRoomStore((s) => s.kickPeer)
   const reportPeer = useRoomStore((s) => s.reportPeer)
+  const follow = usePeerFollow(peerId)
+  // one button, always the next sensible step: stop following, withdraw the request, or ask
+  const followLabel = follow.iFollow ? `Stop following ${name}` : follow.pendingOut ? `Cancel follow request to ${name}` : `Ask to follow ${name}`
 
   const [reporting, setReporting] = useState(false)
   const [reason, setReason] = useState(REPORT_REASONS[0]!.value)
@@ -59,6 +63,18 @@ export default function PeerActions({ peerId, name, onMessage }: { peerId: strin
             onClick={onMessage}
           >
             <ChatIcon size={16} />
+          </button>
+        )}
+        {follow.available && !isBlocked && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon btn-small"
+            aria-pressed={follow.iFollow || follow.pendingOut}
+            aria-label={followLabel}
+            title={followLabel}
+            onClick={follow.iFollow ? follow.stop : follow.pendingOut ? follow.cancel : follow.ask}
+          >
+            <FollowIcon size={16} />
           </button>
         )}
         <button

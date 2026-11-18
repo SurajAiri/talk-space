@@ -13,6 +13,7 @@ import { loadRoomConfig, reportsApi, type RoomView } from '../lib/rooms'
 import { NetworkManager } from '../webrtc/NetworkManager'
 import { hasIceServer } from '../webrtc/diagnose'
 import { TokenBucket } from '../webrtc/RateLimiter'
+import { REQUEST_TTL_MS, type FollowEvent } from '../world/follow'
 import { loadWorldMap } from '../world/maps'
 import { WorldSession } from '../world/WorldSession'
 import type { LinkState, P2PMessage, PeerInfo } from '../webrtc/types'
@@ -238,6 +239,47 @@ export const useRoomStore = create<RoomState>()((set, get) => {
     set({ status: 'ended', endedReason: reason, peers: {}, mic: 'off', muted: true, deafened: false, world: null })
   }
 
+  /** Tells the person what the follow rules (world/follow.ts) just did. Names are the room's, never a peer's claim. */
+  function handleFollowEvent(e: FollowEvent) {
+    const nameOf = (id: string) => get().peers[id]?.name ?? 'Someone'
+    const reqId = (id: string) => `follow-request:${id}`
+    switch (e.kind) {
+      case 'incoming':
+        // A request is a question, so it stays until answered (or it lapses). The People list has the same buttons.
+        toast(`${nameOf(e.from)} wants to follow you`, {
+          id: reqId(e.from),
+          duration: REQUEST_TTL_MS,
+          description: 'Their character will walk after yours until either of you stops.',
+          action: {
+            label: 'Accept',
+            onClick: () => {
+              if (!world?.follow.accept(e.from)) toast.error(`Couldn't accept: ${nameOf(e.from)} is no longer waiting.`)
+            },
+          },
+          cancel: { label: 'Decline', onClick: () => world?.follow.decline(e.from) },
+        })
+        return
+      case 'incoming-gone':
+        toast.dismiss(reqId(e.from))
+        return
+      case 'accepted':
+        toast.success(`You're following ${nameOf(e.by)}. Move yourself to pause.`)
+        return
+      case 'declined':
+        toast(`${nameOf(e.by)} didn't accept your follow request.`)
+        return
+      case 'timeout':
+        toast(`${nameOf(e.to)} didn't answer your follow request.`)
+        return
+      case 'lost-leader':
+        toast(e.reason === 'left' ? `${nameOf(e.id)} left, so you stopped following.` : `${nameOf(e.id)} ended the follow.`)
+        return
+      case 'lost-follower':
+        if (e.reason === 'stopped') toast(`${nameOf(e.id)} stopped following you.`)
+        return
+    }
+  }
+
   function applyBlocks(mgr: NetworkManager) {
     for (const id of blockedIds) mgr.setBlocked(id, true)
     world?.setBlockedIds(blockedIds)
@@ -290,11 +332,12 @@ export const useRoomStore = create<RoomState>()((set, get) => {
     // Rooms with a map get a world. A re-join after a connection drop keeps the same
     // session so you reappear where you were standing.
     if (map) {
-      world ??= new WorldSession({ map, selfId: ack.self.id })
+      world ??= new WorldSession({ map, selfId: ack.self.id, onFollowEvent: handleFollowEvent })
       world.attach(
         (msg) => void mgr.sendPosition(msg),
         (id, on) => mgr.setPeerAudio(id, on),
         (msg) => void mgr.broadcast(msg),
+        (id, msg) => mgr.sendTo(id, msg),
       )
     }
     applyBlocks(mgr)
@@ -338,6 +381,7 @@ export const useRoomStore = create<RoomState>()((set, get) => {
     if (msg.type === 'pos') return world?.onRemotePosition(from, msg)
     if (msg.type === 'emote') return world?.onRemoteEmote(from, msg.id)
     if (msg.type === 'react') return world?.onRemoteReaction(from, msg.id)
+    if (msg.type === 'follow') return world?.onRemoteFollow(from, msg.op)
 
     // A peer chooses its own message id: never let it show the same one twice.
     const key = `${from}:${msg.id}`

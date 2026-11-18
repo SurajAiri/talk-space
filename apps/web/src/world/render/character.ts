@@ -741,6 +741,11 @@ export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
 
+/** The text on a name tag: "You" on your own character (your name is for everyone else to read), otherwise the first name plus any flair. */
+export function tagLabel(char: Pick<Character, 'isPlayer' | 'name' | 'flair'>): string {
+  return (char.isPlayer ? 'You' : firstName(char.name)) + (char.flair ? ' ' + char.flair : '');
+}
+
 /** Top edge of a name tag above a standing person, in px from their tile centre (negative = up). */
 const TAG_Y = -62;
 
@@ -769,7 +774,7 @@ export function drawCharacterOverlays(
   g.translate(char.x, char.y);
   g.scale(scale, scale);
 
-  const tagText = firstName(char.name) + (char.flair ? ' ' + char.flair : '');
+  const tagText = tagLabel(char);
   g.font = `600 12px ${UI_FONT}`;
   const textWidth = g.measureText(tagText).width;
   const pillW = textWidth + 26;

@@ -337,3 +337,24 @@ export const NonBinaryIcon = (p: P) => (
     <path d="M12 10.5V3M8.8 5.2 12 7.4l3.2-2.2" />
   </Icon>
 )
+
+/** A person with an arrow after them: "follow". */
+export const FollowIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="9" cy="7" r="3.2" />
+    <path d="M3.5 20v-1.5A4.5 4.5 0 0 1 8 14h2" />
+    <path d="M14 16h7" />
+    <path d="m18 12.5 3.5 3.5-3.5 3.5" />
+  </Icon>
+)
+export const PauseIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M9 5v14" />
+    <path d="M15 5v14" />
+  </Icon>
+)
+export const PlayIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M7 4.5v15l12-7.5-12-7.5Z" />
+  </Icon>
+)

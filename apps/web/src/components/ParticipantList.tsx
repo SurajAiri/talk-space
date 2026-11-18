@@ -1,4 +1,5 @@
 import type { LinkState } from '../webrtc/types'
+import { usePeerFollow } from '../hooks/useFollow'
 import { useAuthStore } from '../store/auth.store'
 import { useRoomStore } from '../store/room.store'
 import Avatar from './Avatar'
@@ -17,6 +18,41 @@ const LINK_TONE: Record<LinkState, 'live' | 'warn' | 'bad' | 'idle'> = {
   unstable: 'warn',
   failed: 'bad',
   closed: 'bad',
+}
+
+/** What follows between me and this person, in the row: who follows whom, and the buttons for a request waiting on me. */
+function FollowLine({ peerId }: { peerId: string }) {
+  const f = usePeerFollow(peerId)
+  if (f.blocked) return null
+  return (
+    <>
+      {(f.iFollow || f.pendingOut || f.theyFollow) && (
+        <div className="person-sub">
+          {f.iFollow && <span className="is-follow">{f.paused ? 'You paused following' : 'You are following'}</span>}
+          {f.pendingOut && <span className="is-follow">Follow request sent</span>}
+          {f.theyFollow && (
+            <>
+              <span className="is-follow">Following you</span>
+              <button type="button" className="link-btn" onClick={f.remove}>
+                Remove
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {f.theyAsked && (
+        <div className="person-sub follow-ask" role="group" aria-label="Follow request">
+          <span className="is-follow">Wants to follow you</span>
+          <button type="button" className="btn btn-small" onClick={f.accept}>
+            Accept
+          </button>
+          <button type="button" className="btn btn-ghost btn-small" onClick={f.decline}>
+            Decline
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
 
 /** Everyone in the room, with the per-person actions. (Voice playback lives in RemoteAudioHost.) */
@@ -61,6 +97,7 @@ export default function ParticipantList({ onMessage }: { onMessage: (peerId: str
                   <span className="is-bad">{p.problem}</span>
                 </div>
               )}
+              <FollowLine peerId={p.id} />
             </div>
             <PeerActions peerId={p.id} name={p.name} onMessage={() => onMessage(p.id)} />
           </li>

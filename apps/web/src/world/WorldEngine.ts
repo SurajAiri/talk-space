@@ -1,8 +1,9 @@
+import { hash32 } from './appearance.ts'
 import { lookFor } from './avatar.ts'
 import { emoteById, reactionById, REACTION_MS } from './fx.ts'
 import { clampZoom, fitZoom, wheelZoomFactor, zoomLimits, type ZoomLimits } from './camera.ts'
 import { HEARING, hearingGain, zoneAt } from './hearing.ts'
-import { findPath, isTileBlocked, type Waypoint } from './navigation.ts'
+import { findPath, findPathToward, isTileBlocked, type Waypoint } from './navigation.ts'
 import { seatKind } from './assets/seats.ts'
 import { exitTile, nearestSeat, promptFor, seatAnchor, seatedOn, seatIndex, seatInTile, type Prompt, type SeatIndex } from './interact.ts'
 import { drawCharacter, drawCharacterOverlays } from './render/character.ts'
@@ -22,6 +23,17 @@ const STICK_DEADZONE = 0.16
 const TAP_MAX_MS = 600
 const TAP_MAX_MOVE = 10 // px: a finger that travels further than this is panning/pinching, not tapping
 
+/** Following: how close (tiles) a follower tries to stay. Spread per person so a line of followers does not pile onto one spot. */
+const FOLLOW_GAP_MIN = 1.5
+const FOLLOW_GAP_STEP = 0.35
+/** A follower that stopped only walks again once the leader is this much farther than its gap, so it does not twitch at the edge. */
+const FOLLOW_RESUME = 0.9
+const FOLLOW_REPLAN_MS = 350
+/** The clickable box around a person, in px from their tile centre: the body, hair and hats, and the shadow at the feet. */
+const HIT_HALF_W = 18
+const HIT_UP = 46
+const HIT_DOWN = 16
+
 const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'])
 
 export interface PeerLabel {
@@ -38,6 +50,8 @@ export interface EngineOptions {
   /** Read every frame (non-reactive): the engine must not depend on React. */
   getSelf: () => PeerLabel
   getPeers: () => Record<string, PeerLabel>
+  /** Someone else's character was clicked or tapped (screen coordinates). Without this, a click just walks there as before. */
+  onCharacterClick?: (id: string, clientX: number, clientY: number) => void
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -79,6 +93,14 @@ export class WorldEngine {
   private hoverPrompt = false
   private readonly coarse: boolean // a phone or tablet: no keyboard hint on the button
   private marker: { x: number; y: number; age: number } | null = null
+  /** how close I stay to the person I follow, in tiles (see FOLLOW_GAP_MIN) */
+  private readonly followGap: number
+  private followWalking = false
+  private followGoal = { col: -1, row: -1 }
+  private followPlanAt = -Infinity
+  /** engine time in ms, advanced by update(): follow re-planning runs on it, not on the wall clock */
+  private simMs = 0
+  private hoverChar = false
   private camera: { x: number; y: number }
   private view = { x: 0, y: 0 } // clamped camera centre of the last frame (for click -> world mapping)
   private zoom = 1
@@ -108,6 +130,7 @@ export class WorldEngine {
     this.statics = propDepthItems(opts.session.map.props)
     this.night = nightPropsOf(opts.session.map.props)
     this.coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+    this.followGap = FOLLOW_GAP_MIN + (hash32(opts.selfId) % 4) * FOLLOW_GAP_STEP
 
     const l = opts.session.local
     this.player = {
@@ -194,7 +217,7 @@ export class WorldEngine {
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (e.pointerType === 'mouse') {
       // a click is a click the moment it lands
-      if (e.button === 0 && !this.pressPrompt(e.clientX, e.clientY)) this.moveToward(e.clientX, e.clientY)
+      if (e.button === 0 && !this.pressPrompt(e.clientX, e.clientY) && !this.pressCharacter(e.clientX, e.clientY)) this.moveToward(e.clientX, e.clientY)
       return
     }
     if (this.pointers.size === 1) {
@@ -228,7 +251,7 @@ export class WorldEngine {
     const tap = this.tap
     this.pointers.delete(e.pointerId)
     if (this.pointers.size < 2) this.pinch = null
-    if (tap && tap.id === e.pointerId && performance.now() - tap.t < TAP_MAX_MS && !this.pressPrompt(tap.x, tap.y)) this.moveToward(tap.x, tap.y)
+    if (tap && tap.id === e.pointerId && performance.now() - tap.t < TAP_MAX_MS && !this.pressPrompt(tap.x, tap.y) && !this.pressCharacter(tap.x, tap.y)) this.moveToward(tap.x, tap.y)
     if (tap && tap.id === e.pointerId) this.tap = null
   }
 
@@ -245,6 +268,7 @@ export class WorldEngine {
 
   private readonly onPointerLeave = () => {
     this.hoverSeat = null
+    this.hoverChar = false
     this.hoverPrompt = false
     this.canvas.style.cursor = ''
   }
@@ -278,7 +302,31 @@ export class WorldEngine {
     this.hoverPrompt = Boolean(r && w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h)
     const seat = seatInTile(this.seats, w.x, w.y)
     this.hoverSeat = seat && !this.isTaken(seat) && seat !== this.player.sittingSeat ? seat : null
-    this.canvas.style.cursor = this.hoverPrompt || this.hoverSeat ? 'pointer' : ''
+    this.hoverChar = this.opts.onCharacterClick !== undefined && this.pickCharacter(clientX, clientY) !== null
+    this.canvas.style.cursor = this.hoverPrompt || this.hoverSeat || this.hoverChar ? 'pointer' : ''
+  }
+
+  /** The person under a screen point, if any (the one in front when two overlap). Same box for the mouse and a finger, but a finger gets more slack. */
+  private pickCharacter(clientX: number, clientY: number): string | null {
+    const w = this.toWorld(clientX, clientY)
+    const slop = (this.coarse ? 14 : 4) / this.zoom
+    let best: Character | null = null
+    for (const c of this.remote.values()) {
+      if (w.x < c.x - HIT_HALF_W - slop || w.x > c.x + HIT_HALF_W + slop) continue
+      if (w.y < c.y - HIT_UP - slop || w.y > c.y + HIT_DOWN + slop) continue
+      if (!best || c.y > best.y) best = c
+    }
+    return best?.id ?? null
+  }
+
+  /** True (and tells the page) if the press landed on another person's character. */
+  private pressCharacter(clientX: number, clientY: number): boolean {
+    const cb = this.opts.onCharacterClick
+    if (!cb) return false
+    const id = this.pickCharacter(clientX, clientY)
+    if (!id) return false
+    cb(id, clientX, clientY)
+    return true
   }
 
   // ---------- sitting, lying down, standing up ----------
@@ -304,6 +352,7 @@ export class WorldEngine {
     const a = seatAnchor(seat)
     const path = findPath(this.session.map, { col: Math.floor(p.x / TILE), row: Math.floor(p.y / TILE) }, { col: seat.col, row: seat.row })
     if (!path) return
+    this.session.follow.pause() // going to sit is my choice: do not drag me off the seat again
     this.intent = seat
     this.dismissed = null
     this.path = path.length ? path : [{ x: a.x, y: a.y }]
@@ -331,6 +380,7 @@ export class WorldEngine {
     }
     const path = findPath(this.session.map, { col: Math.floor(this.player.x / TILE), row: Math.floor(this.player.y / TILE) }, { col, row })
     if (!path) return // wall, water or unreachable: ignore it
+    this.session.follow.pause() // choosing where to go by hand pauses following (it can be resumed; the leader's yes still stands)
     this.intent = seat // you clicked a free seat: you meant to sit
     this.dismissed = null
     this.path = path.length || !seat ? path : [seatAnchor(seat)]
@@ -394,7 +444,9 @@ export class WorldEngine {
     let speedScale = 1
     const stick = this.session.joystick
     const stickMag = Math.hypot(stick.x, stick.y)
+    this.simMs += dt * 1000
     if (dx !== 0 || dy !== 0) {
+      this.session.follow.pause()
       this.path = []
       this.intent = null
       const len = Math.hypot(dx, dy)
@@ -402,12 +454,14 @@ export class WorldEngine {
       dy /= len
     } else if (stickMag > STICK_DEADZONE) {
       // analog: a light push walks slowly, a full push at full speed
+      this.session.follow.pause()
       this.path = []
       this.intent = null
       dx = stick.x / stickMag
       dy = stick.y / stickMag
       speedScale = Math.min(1, (stickMag - STICK_DEADZONE) / (1 - STICK_DEADZONE) * 1.15)
     } else {
+      this.updateFollow()
       while (this.path.length) {
         const wp = this.path[0]!
         const tx = wp.x - p.x
@@ -480,6 +534,74 @@ export class WorldEngine {
     this.camera.x += (p.x - this.camera.x) * cam
     this.camera.y += (p.y - this.camera.y) * cam
     if (this.marker && (this.marker.age += dt) > 0.8) this.marker = null
+  }
+
+  /**
+   * Walk after the person I follow (the leader said yes, and I have not taken over by hand). Plans a route to the
+   * leader's tile and keeps it fresh as they move; stops once within `followGap`, and only sets off again when they
+   * are clearly farther than that. Runs only when no key or stick is pushed (update()), so taking over is instant.
+   * The route lives in `this.path`, the same one a click uses, so walking, wall sliding and sitting down on arrival
+   * behave as they always did.
+   */
+  private updateFollow() {
+    const f = this.session.follow.snapshot
+    if (!f.following) {
+      // it ended (they left, said stop, or I did): the route I was on was for them, so drop it
+      if (this.followWalking) this.path = []
+      this.followWalking = false
+      return
+    }
+    if (f.paused) {
+      // NOT cleared: a click that paused it just set the route I now want to walk
+      this.followWalking = false
+      return
+    }
+    const leader = this.remote.get(f.following)
+    if (!leader) return // we have not heard where they are yet
+    const p = this.player
+    const dist = Math.hypot(leader.x - p.x, leader.y - p.y) / TILE
+    if (dist <= this.followGap) {
+      if (this.followWalking) this.path = []
+      this.followWalking = false
+      return
+    }
+    if (!this.followWalking && dist < this.followGap + FOLLOW_RESUME) return
+    this.followWalking = true
+
+    const map = this.session.map
+    const goal = { col: Math.floor(leader.x / TILE), row: Math.floor(leader.y / TILE) }
+    const moved = goal.col !== this.followGoal.col || goal.row !== this.followGoal.row
+    // re-plan when they changed tile, or every so often; never every frame, so an unreachable leader costs almost nothing
+    if (!moved && this.simMs - this.followPlanAt < FOLLOW_REPLAN_MS) return
+    this.followGoal = goal
+    this.followPlanAt = this.simMs
+    // a leader standing inside a wall (a modified client can claim that) is approached to within one tile instead
+    const within = isTileBlocked(map, goal.col, goal.row) ? 1 : 0
+    this.path = findPathToward(map, { col: Math.floor(p.x / TILE), row: Math.floor(p.y / TILE) }, goal, within) ?? []
+  }
+
+  /** A dotted line on the ground between me and the people I follow / who follow me: it is invisible to everyone else. */
+  private drawFollowLinks() {
+    const f = this.session.follow.snapshot
+    if (!f.following && f.followers.length === 0) return
+    const { ctx } = this
+    const me = this.player
+    ctx.save()
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
+    ctx.setLineDash([1, 8])
+    const link = (id: string, live: boolean) => {
+      const c = this.remote.get(id)
+      if (!c) return
+      ctx.strokeStyle = live ? 'rgba(125, 180, 255, 0.85)' : 'rgba(148, 163, 184, 0.5)'
+      ctx.beginPath()
+      ctx.moveTo(me.x, me.y + 14)
+      ctx.lineTo(c.x, c.y + 14)
+      ctx.stroke()
+    }
+    if (f.following) link(f.following, !f.paused)
+    for (const id of f.followers) link(id, true)
+    ctx.restore()
   }
 
   /** Mark taken seats (beanbags squash) and work out what the Sit / Stand up button says right now. */
@@ -653,6 +775,7 @@ export class WorldEngine {
 
     drawWorldTiles(ctx, map.grid, startCol, endCol, startRow, endRow, time)
     this.drawHearingGuides()
+    this.drawFollowLinks()
 
     if (this.marker) {
       ctx.strokeStyle = `rgba(52, 211, 153, ${1 - this.marker.age / 0.8})`

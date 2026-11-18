@@ -44,6 +44,8 @@ const LIMITS = {
   presence: { capacity: 10, perSecond: 2 },
   /** emotes and reactions: a burst of a few, then about one a second */
   fx: { capacity: 4, perSecond: 1.2 },
+  /** follow requests and answers: honest use is a message every few seconds, so this is a generous burst, then one per 2 s */
+  follow: { capacity: 4, perSecond: 0.5 },
 } as const
 /** More than this many dropped/invalid messages inside the window and the peer is reported as abusive. */
 const ABUSE_DROPS = 150
@@ -65,6 +67,7 @@ interface PeerBudget {
   pos: TokenBucket
   presence: TokenBucket
   fx: TokenBucket
+  follow: TokenBucket
   drops: WindowCounter
   lastAbuseReport: number
 }
@@ -152,6 +155,7 @@ export class NetworkManager {
         pos: mk(LIMITS.pos),
         presence: mk(LIMITS.presence),
         fx: mk(LIMITS.fx),
+        follow: mk(LIMITS.follow),
         drops: new WindowCounter(ABUSE_WINDOW_MS, this.now),
         lastAbuseReport: -Infinity,
       }
@@ -178,7 +182,16 @@ export class NetworkManager {
     const msg = parseP2PMessage(raw, this.opts.chatMax)
     if (!msg) return this.drop(peerId, 'garbage')
 
-    const bucket = msg.type === 'chat' ? b.chat : msg.type === 'pos' ? b.pos : msg.type === 'emote' || msg.type === 'react' ? b.fx : b.presence
+    const bucket =
+      msg.type === 'chat'
+        ? b.chat
+        : msg.type === 'pos'
+          ? b.pos
+          : msg.type === 'emote' || msg.type === 'react'
+            ? b.fx
+            : msg.type === 'follow'
+              ? b.follow
+              : b.presence
     if (!bucket.take()) return this.drop(peerId, 'flooding')
     this.opts.handlers.onPeerMessage(peerId, msg)
   }
@@ -333,10 +346,12 @@ export class NetworkManager {
 
   /**
    * Sends to ONE connected peer (direct messages). False when there is no open link to them, or
-   * when they are blocked: a blocked person gets no chat from us, direct or not.
+   * when they are blocked: a blocked person gets no chat from us, direct or not, and no follow request or
+   * answer. The one exception is `follow` + `stop`: it ends a follow, and without it a blocked person's browser
+   * would keep walking after us. It looks the same as removing a follower, so it does not reveal the block.
    */
   sendTo(peerId: string, msg: P2PMessage): boolean {
-    if (msg.type === 'chat' && this.blocked.has(peerId)) return false
+    if (this.blocked.has(peerId) && (msg.type === 'chat' || (msg.type === 'follow' && msg.op !== 'stop'))) return false
     const link = this.links.get(peerId)
     return link ? link.send(JSON.stringify(msg)) : false
   }

@@ -6,6 +6,7 @@ import { NetworkManager, type AbuseReason } from '../src/webrtc/NetworkManager.t
 import type { Link, PeerLinkOptions } from '../src/webrtc/PeerLink.ts'
 import { TokenBucket, WindowCounter } from '../src/webrtc/RateLimiter.ts'
 import { parseP2PMessage, type LinkState, type P2PMessage, type SignalData } from '../src/webrtc/types.ts'
+import type { FollowEvent } from '../src/world/follow.ts'
 import { hearingGain } from '../src/world/hearing.ts'
 import { buildWorldMap, parseMapFile } from '../src/world/format/mapFile.ts'
 import { WorldSession } from '../src/world/WorldSession.ts'
@@ -576,6 +577,118 @@ test('someone else\'s emote shows on them only, ignores unknown ids, and goes aw
     assert.equal(w.emotes.has('me'), false)
     w.onPeerLeft('p')
     assert.equal(w.emotes.has('p') || w.reactions.has('p'), false)
+  } finally {
+    w.close()
+  }
+})
+
+// ---------------------------------------------------------------- following
+
+test('follow messages: only the four fixed verbs get through the parser, and nothing rides along', () => {
+  for (const op of ['request', 'accept', 'decline', 'stop']) {
+    assert.deepEqual(parseP2PMessage(JSON.stringify({ type: 'follow', op }), 100), { type: 'follow', op })
+  }
+  assert.deepEqual(parseP2PMessage(JSON.stringify({ type: 'follow', op: 'request', text: 'visit evil.example', to: 'someone-else' }), 100), { type: 'follow', op: 'request' })
+  for (const bad of [
+    { type: 'follow', op: 'REQUEST' },
+    { type: 'follow', op: 'follow' },
+    { type: 'follow', op: '__proto__' },
+    { type: 'follow', op: 'constructor' },
+    { type: 'follow', op: ['request'] },
+    { type: 'follow', op: 1 },
+    { type: 'follow', op: null },
+    { type: 'follow' },
+  ]) {
+    assert.equal(parseP2PMessage(JSON.stringify(bad), 100), null, JSON.stringify(bad))
+  }
+})
+
+test('a peer cannot flood follow requests: a short burst gets through, the rest is dropped, and chat is unaffected', () => {
+  const s = setup()
+  s.mgr.connect('p1', true)
+  const link = s.latest('p1')
+  for (let i = 0; i < 40; i++) link.recv({ type: 'follow', op: 'request' })
+  const delivered = s.messages.filter((m) => m.msg.type === 'follow').length
+  assert.ok(delivered >= 1 && delivered <= 5, `expected only the burst, got ${delivered}`)
+  link.recv(chat('after'))
+  assert.equal(s.messages.filter((m) => m.msg.type === 'chat').length, 1, 'follow does not use up the chat allowance')
+})
+
+test('a blocked peer cannot ask us anything, and gets no request or answer from us: only `stop`, so they cannot keep chasing us', () => {
+  const s = setup()
+  s.mgr.connect('p1', true)
+  const link = s.latest('p1')
+  s.mgr.setBlocked('p1', true)
+
+  link.recv({ type: 'follow', op: 'request' })
+  assert.equal(s.messages.length, 0, 'their request never reaches us')
+
+  for (const op of ['request', 'accept', 'decline'] as const) assert.equal(s.mgr.sendTo('p1', { type: 'follow', op }), false, op)
+  assert.equal(link.sent.length, 0)
+  assert.equal(s.mgr.sendTo('p1', { type: 'follow', op: 'stop' }), true)
+  assert.deepEqual(link.sent.map((x) => JSON.parse(x)), [{ type: 'follow', op: 'stop' }])
+
+  s.mgr.setBlocked('p1', false)
+  assert.equal(s.mgr.sendTo('p1', { type: 'follow', op: 'request' }), true, 'unblocked people can be asked again')
+})
+
+test('follow end to end: the session asks over the real network layer, and the answer arrives from the link it came in on', () => {
+  const events: FollowEvent[] = []
+  const w = new WorldSession({ map, selfId: 'me', onFollowEvent: (e) => events.push(e) })
+  try {
+    const s = setup({
+      handlers: {
+        onPeerState: () => {},
+        onPeerStream: () => {},
+        onPeerMessage: (from, msg) => {
+          if (msg.type === 'follow') w.onRemoteFollow(from, msg.op)
+        },
+      },
+    })
+    w.attach(() => {}, undefined, undefined, (id, msg) => s.mgr.sendTo(id, msg))
+    s.mgr.connect('p1', true)
+    s.mgr.connect('p2', true)
+    const [p1, p2] = [s.latest('p1'), s.latest('p2')]
+
+    assert.equal(w.follow.request('p1'), 'sent')
+    assert.deepEqual(p1.sent.map((x) => JSON.parse(x)), [{ type: 'follow', op: 'request' }])
+    assert.equal(p2.sent.length, 0, 'only the person asked hears about it')
+
+    p2.recv({ type: 'follow', op: 'accept' }) // somebody we did not ask
+    assert.equal(w.follow.snapshot.following, null, 'an accept from anyone but the person we asked is ignored')
+    assert.deepEqual(p2.sent.map((x) => JSON.parse(x)), [{ type: 'follow', op: 'stop' }], 'and they are told it did not count')
+
+    p1.recv({ type: 'follow', op: 'accept' })
+    assert.equal(w.follow.snapshot.following, 'p1')
+    assert.deepEqual(events, [{ kind: 'accepted', by: 'p1' }])
+
+    // blocking the person we follow ends it, and tells them with the one message a block is still allowed to send
+    s.mgr.setBlocked('p1', true)
+    w.setBlockedIds(new Set(['p1']))
+    assert.equal(w.follow.snapshot.following, null)
+    assert.deepEqual(JSON.parse(p1.sent.at(-1)!), { type: 'follow', op: 'stop' })
+  } finally {
+    w.close()
+  }
+})
+
+test('follow: a person leaving, or a fresh network, ends every follow with them (and takes their prompt away)', () => {
+  const events: FollowEvent[] = []
+  const w = new WorldSession({ map, selfId: 'me', onFollowEvent: (e) => events.push(e) })
+  try {
+    w.attach(() => {}, undefined, undefined, () => true)
+    w.onRemoteFollow('a', 'request') // a wants to follow us
+    w.follow.request('b')
+    w.onRemoteFollow('b', 'accept') // we follow b
+    assert.deepEqual([w.follow.snapshot.following, w.follow.snapshot.incoming], ['b', ['a']])
+
+    w.onPeerLeft('b')
+    assert.equal(w.follow.snapshot.following, null)
+    assert.ok(events.some((e) => e.kind === 'lost-leader' && e.id === 'b' && e.reason === 'left'))
+
+    w.attach(() => {}, undefined, undefined, () => true) // re-joined on a new network
+    assert.deepEqual(w.follow.snapshot.incoming, [])
+    assert.ok(events.some((e) => e.kind === 'incoming-gone' && e.from === 'a'), 'the on-screen prompt for a is removed')
   } finally {
     w.close()
   }

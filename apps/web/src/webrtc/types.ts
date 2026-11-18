@@ -1,5 +1,6 @@
 import type { AvatarConfig } from '../world/avatar.ts'
 import { emoteById, reactionById } from '../world/fx.ts'
+import { isFollowOp, type FollowOp } from '../world/follow.ts'
 
 export interface PeerInfo {
   id: string
@@ -26,6 +27,11 @@ export type P2PMessage =
   | { type: 'emote'; id: string }
   /** float an emoji or a big animated word above my head (world/fx.ts). Only ever an id from that list. */
   | { type: 'react'; id: string }
+  /**
+   * "may I follow you?" / yes / no / stop (world/follow.ts). Sent to ONE person, never broadcast. A fixed verb and
+   * nothing else, and the sender is the link it came in on, so a peer cannot speak for anyone but itself.
+   */
+  | { type: 'follow'; op: FollowOp }
   | PosMessage
 
 /**
@@ -68,6 +74,7 @@ export function parseP2PMessage(raw: unknown, chatMax: number): P2PMessage | nul
   // "dance", never show text or an image of its own choosing.
   if (m.type === 'emote' && emoteById(m.id)) return { type: 'emote', id: m.id as string }
   if (m.type === 'react' && reactionById(m.id)) return { type: 'react', id: m.id as string }
+  if (m.type === 'follow' && isFollowOp(m.op)) return { type: 'follow', op: m.op }
   if (
     m.type === 'pos' &&
     isCoord(m.x) &&

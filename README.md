@@ -48,6 +48,7 @@ Talk Space is a browser-based social audio app. Every room is a small pixel-art 
 - **Rooms**: up to 8 people each, in 18 languages, with a purpose (language learning, discussion, debate, explore, misc), up to 5 tags and a choice of 6 maps.
 - **Public and private rooms.** Public rooms appear in the lobby while someone is inside. Private rooms need a 6-letter room ID plus an 8-digit join code, and repeated wrong guesses are blocked. Empty rooms disappear.
 - **Voice and text chat**, with messages to everyone or privately to one person. Mute yourself, mute the room's sound, or join listen-only.
+- **Follow**: click someone's character (or use the People list) and choose *Ask to follow*. If they accept, your character walks after theirs on its own. Moving by hand pauses it (one click resumes it), and either of you can stop it at any time. It is peer to peer like everything else in the room: the server is not involved, so consent is enforced on both ends (see `apps/web/src/world/follow.ts`).
 - **Safety tools**: block, report or (as host) remove someone. Reports land in an admin moderation queue (dismiss, strike, suspend, ban).
 - **Privacy option**: hide your IP address by relaying all media through a TURN server.
 - **Accounts**: email and password, or optional Google login. Short-lived JWTs that the web app refreshes in the background.

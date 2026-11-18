@@ -710,7 +710,11 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .rinfo-copy { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* bottom: who hears you / mic / hints */
-.room-bl { position: absolute; z-index: 15; left: calc(12px + var(--safe-l)); bottom: calc(12px + var(--safe-b)); }
+.room-bl {
+  position: absolute; z-index: 15; left: calc(12px + var(--safe-l)); bottom: calc(12px + var(--safe-b));
+  /* bottom-anchored: the first child (who can hear you) stays at the bottom, follow chips stack above it */
+  display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 8px;
+}
 .hearing {
   display: flex; align-items: center; gap: 10px; max-width: 280px; padding: 6px 12px 6px 6px; border: 1px solid var(--glass-line); border-radius: 999px;
   background: var(--glass); color: #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); cursor: pointer; text-align: left;
@@ -725,6 +729,37 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 .hearing-stack { display: flex; margin-left: 2px; }
 .hearing-stack .avatar { margin-left: -8px; box-shadow: 0 0 0 2px #1a2244; }
 .hearing-stack .avatar:first-child { margin-left: 0; }
+
+/* follow: status chips under "who can hear you", and the menu for a person you clicked */
+.fchip {
+  display: flex; align-items: center; gap: 8px; max-width: 280px; padding: 5px 6px 5px 12px; border: 1px solid var(--glass-line); border-radius: 999px;
+  background: var(--glass); color: #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font: inherit; font-size: 0.8125rem;
+  box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.6); text-align: left;
+}
+.fchip > svg { flex-shrink: 0; color: #7db4ff; }
+.fchip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.fchip-btn {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; min-height: 30px; padding: 0 11px; border: 0; border-radius: 999px;
+  background: rgb(255 255 255 / 0.14); color: #fff; font: inherit; font-size: 0.78rem; font-weight: 650; cursor: pointer;
+}
+.fchip-btn:hover { background: rgb(255 255 255 / 0.26); }
+.fchip-btn:focus-visible, .fchip-info:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.fchip-info { padding-right: 14px; cursor: pointer; }
+.fchip-info:hover { background: rgb(24 33 66 / 0.85); }
+@media (pointer: coarse) { .fchip-btn { min-height: 38px; padding: 0 14px; } }
+
+.cmenu {
+  position: fixed; left: 0; top: 0; z-index: 900; width: 244px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); outline: none;
+  animation: pop-in 0.16s ease-out;
+}
+.cmenu-head { padding: 6px 12px 4px; font-weight: 700; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmenu-note { margin: 0; padding: 6px 12px 8px; color: var(--text-2); font-size: 0.8125rem; }
+
+.person-sub .is-follow { color: var(--brand); font-weight: 600; }
+.person-sub.follow-ask { align-items: center; gap: 6px 8px; margin-top: 4px; }
+.link-btn { padding: 0; border: 0; background: none; color: var(--text-2); font: inherit; font-size: 0.78rem; text-decoration: underline; cursor: pointer; }
+.link-btn:hover { color: var(--text); }
 
 .movehint {
   position: absolute; z-index: 14; left: 50%; bottom: calc(86px + var(--safe-b)); transform: translateX(-50%); margin: 0; padding: 8px 16px;
@@ -779,7 +814,7 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 @media (pointer: coarse) {
   /* phones held sideways get a floating panel rather than a sheet: same clearance for the badge */
   .float:not(.is-sheet) { padding-bottom: var(--host-badge); }
-  .room-bl { left: auto; right: calc(12px + var(--safe-r)); bottom: calc(12px + var(--safe-b) + var(--host-badge)); }
+  .room-bl { left: auto; right: calc(12px + var(--safe-r)); bottom: calc(12px + var(--safe-b) + var(--host-badge)); align-items: flex-end; }
 }
 
 /* floating panels (chat, people); on phones they are bottom sheets */
@@ -1111,8 +1146,9 @@ html:has(.room-screen), body:has(.room-screen) { overflow: hidden; overscroll-be
 
   .joystick { width: 124px; height: 124px; left: calc(16px + var(--safe-l)); bottom: calc(20px + var(--safe-b)); }
   /* who-can-hear-you sits under the room name instead of competing with the thumbs */
-  .room-bl { left: calc(12px + var(--safe-l)); top: calc(60px + var(--safe-t)); bottom: auto; right: auto; }
+  .room-bl { left: calc(12px + var(--safe-l)); top: calc(60px + var(--safe-t)); bottom: auto; right: auto; flex-direction: column; align-items: flex-start; }
   .hearing { padding-right: 10px; max-width: 210px; }
+  .fchip { max-width: 210px; }
   .hearing-sub { display: none; }
   .hearing-icon { width: 30px; height: 30px; }
   .movehint { white-space: normal; text-align: center; max-width: 84vw; }

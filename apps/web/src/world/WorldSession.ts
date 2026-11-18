@@ -1,4 +1,5 @@
 import type { P2PMessage, PosMessage } from '../webrtc/types.ts'
+import { FollowManager, type FollowEvent, type FollowOp } from './follow.ts'
 import { emoteById, reactionById } from './fx.ts'
 import { hearingGain, zoneAt } from './hearing.ts'
 import { isTileBlocked } from './navigation.ts'
@@ -76,6 +77,8 @@ export class WorldSession {
   /** personId -> the emoji or big word floating over their head right now (newest only). */
   readonly reactions = new Map<string, ActiveFx>()
   readonly selfId: string
+  /** Who follows whom, and the request/accept that lets them (world/follow.ts). The engine reads it; the UI drives it. */
+  readonly follow: FollowManager
   /** On-screen joystick, -1..1 on each axis (0,0 = released). Written by the UI, read by the engine. */
   readonly joystick = { x: 0, y: 0 }
   /** The part of the map on screen, in tile units (centre and size). Written by the engine every frame, read by the minimap. */
@@ -84,6 +87,7 @@ export class WorldSession {
 
   private send: ((msg: PosMessage) => void) | null = null
   private broadcast: ((msg: P2PMessage) => void) | null = null
+  private sendTo: ((id: string, msg: P2PMessage) => boolean) | null = null
   private lastEmoteAt = -Infinity
   private lastReactionAt = -Infinity
   private audioGate: ((id: string, on: boolean) => void) | null = null
@@ -99,9 +103,14 @@ export class WorldSession {
   private hudKey = ''
   private readonly listeners = new Set<(h: HudSnapshot) => void>()
 
-  constructor(opts: { map: WorldMap; selfId: string }) {
+  constructor(opts: { map: WorldMap; selfId: string; onFollowEvent?: (e: FollowEvent) => void }) {
     this.map = opts.map
     this.selfId = opts.selfId
+    this.follow = new FollowManager({
+      send: (to, op) => this.sendTo?.(to, { type: 'follow', op }) ?? false,
+      isBlocked: (id) => this.blocked.has(id),
+      onEvent: opts.onFollowEvent,
+    })
     const spawn = pickSpawn(opts.map, opts.selfId)
     this.local = { x: spawn.col + 0.5, y: spawn.row + 0.5, dir: 'down', moving: false }
     this.timer = setInterval(() => this.tick(), TICK_MS)
@@ -120,9 +129,15 @@ export class WorldSession {
   }
 
   /** (Re)bind to a fresh network. Anything learned from the old one is stale. */
-  attach(send: (msg: PosMessage) => void, audioGate?: (id: string, on: boolean) => void, broadcast?: (msg: P2PMessage) => void) {
+  attach(
+    send: (msg: PosMessage) => void,
+    audioGate?: (id: string, on: boolean) => void,
+    broadcast?: (msg: P2PMessage) => void,
+    sendTo?: (id: string, msg: P2PMessage) => boolean,
+  ) {
     this.send = send
     this.broadcast = broadcast ?? null
+    this.sendTo = sendTo ?? null
     this.audioGate = audioGate ?? null
     this.lastSent = null // force an immediate broadcast to the new peers
     this.clearRemotes()
@@ -132,17 +147,21 @@ export class WorldSession {
   detach() {
     this.send = null
     this.broadcast = null
+    this.sendTo = null
     this.audioGate = null
     this.clearRemotes()
   }
 
   /** People this browser ignores: silent, and they get none of our voice either. */
   setBlockedIds(ids: ReadonlySet<string>) {
+    const added = [...ids].filter((id) => !this.blocked.has(id))
     this.blocked = new Set(ids)
+    for (const id of added) this.follow.peerBlocked(id) // a blocked person must not keep walking after us (or us after them)
     this.updateHearing()
   }
 
   clearRemotes() {
+    this.follow.reset() // a fresh network: nobody we knew is bound to what we agreed with them
     this.remotes.clear()
     this.remoteSeenAt.clear()
     this.gated.clear()
@@ -211,6 +230,11 @@ export class WorldSession {
     if (reactionById(reaction)) this.reactions.set(id, { id: reaction, at: now })
   }
 
+  /** Someone sent a follow request / answer / stop (already validated and rate limited). */
+  onRemoteFollow(id: string, op: FollowOp) {
+    this.follow.receive(id, op)
+  }
+
   setJoystick(x: number, y: number) {
     this.joystick.x = x
     this.joystick.y = y
@@ -225,6 +249,7 @@ export class WorldSession {
   }
 
   onPeerLeft(id: string) {
+    this.follow.peerLeft(id)
     this.bubbles.delete(id)
     this.emotes.delete(id)
     this.reactions.delete(id)
@@ -246,6 +271,8 @@ export class WorldSession {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     this.send = null
+    this.sendTo = null
+    this.follow.reset()
     this.listeners.clear()
     this.remotes.clear()
     this.bubbles.clear()
@@ -257,6 +284,7 @@ export class WorldSession {
   private tick() {
     this.broadcastLocal()
     this.updateHearing()
+    this.follow.tick()
   }
 
   private broadcastLocal() {

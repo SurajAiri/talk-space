@@ -7,6 +7,7 @@ import MapThumb from '../components/MapThumb'
 import ParticipantList from '../components/ParticipantList'
 import RemoteAudio from '../components/RemoteAudio'
 import ChatWindow from '../components/room/ChatWindow'
+import FollowChip from '../components/room/FollowChip'
 import FloatPanel from '../components/room/FloatPanel'
 import HearingChip from '../components/room/HearingChip'
 import Joystick from '../components/room/Joystick'
@@ -309,7 +310,7 @@ function InRoom() {
     <div className="room-screen" ref={screenRef}>
       {world ? (
         <div className="room-world">
-          <WorldView session={world} />
+          <WorldView session={world} onMessage={(id) => openChat(id)} />
         </div>
       ) : (
         <div className="room-backdrop" />
@@ -344,6 +345,7 @@ function InRoom() {
       {world && (
         <div className="room-bl">
           <HearingChip session={world} onClick={openPeople} />
+          <FollowChip session={world} onPeople={openPeople} />
         </div>
       )}
       {world && mapVisible && <MiniMap session={world} />}
