@@ -1,6 +1,8 @@
 import { toNodeHandler } from "better-auth/node";
 import express from "express";
 import helmet from "helmet";
+import type { HelmetOptions } from "helmet";
+import type { RequestHandler } from "express";
 import { env } from "./config/env.js";
 import { googleAuth } from "./lib/better-auth.js";
 import { authorizeUser } from "./middlewares/authorization.middlewares.js";
@@ -18,7 +20,11 @@ app.disable("x-powered-by");
 // every request appears to come from the proxy and per-IP limits hit everyone at once.
 if (env.TRUST_PROXY > 0) app.set("trust proxy", env.TRUST_PROXY);
 
-app.use(helmet());
+// app.use(helmet());
+const helmetMiddleware = helmet as unknown as (
+  options?: Readonly<HelmetOptions>,
+) => RequestHandler;
+app.use(helmetMiddleware());
 
 // The web app lives on its own origin (WEB_URL) and calls this API directly from the browser.
 // Only that exact origin is granted access; every other origin gets no CORS headers at all and
